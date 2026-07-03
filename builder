@@ -17,7 +17,7 @@
 #
 ########################################################################
 
-INSTALLER="${INSTALLER:-cpm install -g}"
+INSTALLER="${INSTALLER:-cpm install -g --show-build-log-on-failure }"
 
 ########################################################################
 function install_deps {
