@@ -2,8 +2,8 @@ Amazon::Signature4::Lite 1.0.1
 Amazon::Credentials
 Carp::Always
 Class::Accessor::Fast
-CLI::Simple 2.0.6
-CPAN::Maker
+CLI::Simple 2.0.7
+CPAN::Maker 2.0.1
 Date::Format
 File::ShareDir
 File::ShareDir::Install
@@ -16,6 +16,7 @@ JSON::XS
 List::MoreUtils
 List::Util
 Net::SSLeay
+Markdown::Render
 Pod::HTML2Pod
 Pod::Extract
 Pod::Markdown

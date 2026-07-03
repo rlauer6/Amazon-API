@@ -1,3 +1,33 @@
+Thu Jul  2 05:25:56 2026  Rob Lauer  <rclauer@gmail.com>
+
+	[2.4.2]:
+	* release-notes: updated
+	* release-notes/release-notes-2.4.2.md
+	* README.md: generated
+	* VERSION: bump
+	* lib/Amazon/API.pm.in
+	(paginator)
+	- use require instead of load (so scandeps-static.pl	finds it)
+	(decode_response): likewise
+	(generate_xml): likewise
+	(_set_default_logger): likewise
+	* lib/Amazon/API/Botocore/Pod.pm.in
+	(require_class): use load instead of require (to avoid perlcritic finding)
+	* project.mk
+	(llm-release-notes): new
+	* requires
+	- -Carp::Always, -URI, -Pod::Parse, -Pod::Text, -Pod::Simple,
+	- -HTTP::Headers, -Date::Format
+	* cpanfile: likewise
+	* test-requires: modified
+	* test-requires.skip: new
+	* build-requires
+	- +CPAN::Maker::Bootstrapper, Markdown::Render
+	* builder: update by CPAN::Maker::Bootstrapper
+	* Makefile: likewise
+	* .includes/perl.mk: likewise
+	* test-requires: -Test::More
+
 Tue Jun 30 08:10:24 2026  Rob Lauer  <rclauer@gmail.com>
 
 	[2.4.1]: fix CI build

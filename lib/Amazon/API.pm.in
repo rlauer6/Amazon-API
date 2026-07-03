@@ -572,7 +572,7 @@ sub choose(&) { return $_[0]->(); } ## no critic
 ########################################################################
 sub paginator {
 ########################################################################
-  load 'Amazon::API::Botocore';
+  require Amazon::API::Botocore;
 
   return Amazon::API::Botocore::paginator(@_);
 }
@@ -711,7 +711,7 @@ sub decode_response {
         decode_json($content);
       }
       elsif ( $content_type =~ /xml/xmsi ) {
-        load 'XML::Simple';
+        require XML::Simple;
 
         ################################################################
         # Maddening interpretation of XML output from these ass hats (-:|3
@@ -749,7 +749,7 @@ sub decode_response {
       $decoded_content = eval { return decode_json($content); };
 
       if ( !$decoded_content || $EVAL_ERROR ) {
-        load 'XML::Simple';
+        require XML::Simple;
         $decoded_content = eval {
           return XML::Simple::XMLin(
             $content,
@@ -1689,7 +1689,7 @@ sub generate_xml {
 ########################################################################
   my ( $self, $data ) = @_;
 
-  load 'XML::Twig';
+  require XML::Twig;
 
   my @elements;
 
@@ -1956,7 +1956,7 @@ sub _set_default_logger {
     return $self;
   }
 
-  load 'Log::Log4perl';
+  require Log::Log4perl;
 
   my $log_level_numeric = $LOG4PERL_LOG_LEVELS{ lc $log_level_string } // $LOG4PERL_LOG_LEVELS{info};
   my $log_level_name    = uc $log_level_string;
