@@ -214,3 +214,9 @@ workdir/buildspec-api.yml: buildspec-api.yml.in | workdir
 	-e "s/@email@/$$EMAIL/g" \
 	-e "s/@name@/$$FULLNAME/g" $< > $@
 	tree workdir
+
+llm-release-notes:
+	$(NO_ECHO)$(MAKE) release-notes; \
+	if [[ -e "release-$(VERSION).diffs" ]]; then \
+	  echo bootstrapper release-notes; \
+	fi

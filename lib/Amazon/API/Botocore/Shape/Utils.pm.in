@@ -128,7 +128,7 @@ sub require_class {
 
   $class_path =~ s/::/\//xsmg;
 
-  my $retval = eval { require "$class_path.pm"; };
+  my $retval = eval { load "$class_path.pm"; };
 
   return $retval ? $INC{"$class_path.pm"} : undef;
 }

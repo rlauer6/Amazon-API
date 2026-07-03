@@ -17,15 +17,15 @@
 #
 ########################################################################
 
-INSTALLER="${INSTALLER:-cpm install -g}"
+INSTALLER="${INSTALLER:-cpm install -g --show-build-log-on-failure --verbose}"
 
 ########################################################################
 function install_deps {
 ########################################################################
     
-    EXTRA_DEPS=(CPAN::Maker@1.9.1 Module::ScanDeps::Static)
+    EXTRA_DEPS=(CPAN::Maker@2.0.1 CPAN::Maker::Bootstrapper@2.0.3)
     EXTRA_DEPS+=(File::ShareDir File::ShareDir::Install)
-    EXTRA_DEPS+=(Pod::Markdown Markdown::Render@2.0.4)
+    EXTRA_DEPS+=(Pod::Markdown Markdown::Render)
 
     if [[ -n "$PERLCRITICRC" ]]; then
         EXTRA_DEPS+=(Perl::Critic Perl::Critic::Policy::Compatibility::PodMinimumVersion)
@@ -50,7 +50,7 @@ function install_deps {
     test -e build-requires && cat build-requires >> $all_requires
     test -e test-requires && cat test-requires >> $all_requires
 
-    perl -ne 'chomp;($m,$v)=split /(?:[@]|\s+)/,$_,2; $v //= q{}; $m=~s/^\+//; $v = $v =~/\s*0\s*/ ? q{} : $v; print qq{requires "$m", "$v";\n};' \
+    perl -ne 'chomp;($m,$v)=split /(?:[@]|\s+)/,$_,2; $v //= q{}; $m=~s/^\+//; $v = $v eq q{0} ? q{} : $v; print qq{requires "$m", "$v";\n};' \
          $all_requires | sort -u  >cpanfile
 
     if [[ "$INSTALLER" =~ cpanm ]]; then
@@ -97,7 +97,8 @@ else
 fi
 
 if [[ -n "$REPO" ]]; then
-    test -d $(basename $REPO .git) || git clone $REPO
+    dir=$(basename $REPO .git)
+    test -d $dir || git clone $REPO
     cd $(basename $REPO .git)
 else
    git rev-parse --git-dir > /dev/null 2>&1 \

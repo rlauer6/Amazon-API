@@ -10,7 +10,7 @@ use Pod::Find qw(pod_where);
 
 our @EXPORT_OK = qw( pod );
 
-our $VERSION = '@PACKAGE_VERSION@';  ## no critic (RequireInterpolationOfMetachars)
+our $VERSION = '@PACKAGE_VERSION@'; ## no critic (RequireInterpolationOfMetachars)
 
 ########################################################################
 sub pod {
