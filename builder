@@ -23,7 +23,7 @@ INSTALLER="${INSTALLER:-cpm install -g --show-build-log-on-failure --verbose}"
 function install_deps {
 ########################################################################
     
-    EXTRA_DEPS=(CPAN::Maker@2.0.1 CPAN::Maker::Bootstrapper@2.0.3)
+    EXTRA_DEPS=(CPAN::Maker CPAN::Maker::Bootstrapper)
     EXTRA_DEPS+=(File::ShareDir File::ShareDir::Install)
     EXTRA_DEPS+=(Pod::Markdown Markdown::Render)
 
@@ -99,7 +99,7 @@ fi
 if [[ -n "$REPO" ]]; then
     dir=$(basename $REPO .git)
     test -d $dir || git clone $REPO
-    cd $(basename $REPO .git)
+    cd $dir
 else
    git rev-parse --git-dir > /dev/null 2>&1 \
         || { echo "ERROR: not a git repository and no REPO specified" >&2; exit 1; }

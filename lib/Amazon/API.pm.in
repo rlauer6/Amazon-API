@@ -100,6 +100,8 @@ our @EXPORT_OK = qw(
   service
 );
 
+=pod
+
 =begin 'ignore'
 
 The service categories were extracted from Botocore project:
@@ -2240,13 +2242,11 @@ Amazon::API - A generic base class for AWS Services
 
 https://github.com/rlauer6/perl-Amazon-API/actions/workflows/build.yml/badge.svg
 
-=begin markdown
+=begin 'markdown'
 
 [![amazon-api](https://github.com/rlauer6/perl-Amazon-API/actions/workflows/build.yml/badge.svg)](https://github.com/rlauer6/perl-Amazon-API/actions/workflows/build.yml)
 
-=end markdown
-
-=pod
+=end 'markdown'
 
 Generic class for constructing AWS API interfaces. Typically used as a
 parent class, but can be used directly. This package can also

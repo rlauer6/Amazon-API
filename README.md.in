@@ -34,12 +34,13 @@ Libraries needed to build certain Perl module dependencies:
 
 * `CPAN::Maker` >= 2.0.1
 * `Markdown::Render`
-* `CPAN::Maker::Bootstrapper`
+* `CPAN::Maker::Bootstrapper` >= 2.0.3
 * `Module::ScanDeps::Static`
 * `Pod::Markdown`
 * `Pod::HTML2Pod`
 * `List::MoreUtils`
 * `JSON::XS`
++ ...and possibly others
 
 ## Perl Modules (Optional)
 

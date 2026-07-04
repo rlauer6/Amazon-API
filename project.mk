@@ -8,7 +8,7 @@ BOTOCORE_REPO  = https://github.com/boto/botocore.git
 
 BUILD_BOTO_SERVICES = $(BUILD_DIR)/bin/build-boto-services
 
-CPAN_DIST_MAKER=make-cpan-dist.pl
+CPAN_DIST_MAKER=cpan-maker
 DEPS += services.api
 
 $(BUILD_BOTO_SERVICES):
@@ -45,7 +45,7 @@ workdir/requires: requires.cpan-dist | workdir
 	cp $< $@
 
 .PHONY: cpan
-cpan: workdir/buildspec-api.yml api workdir/requires | workdir
+cpan-dist: workdir/buildspec-api.yml api workdir/service workdir/requires | workdir ## create a CPAN distribution for an AWS API (make SERVICE=route53 MODULE_ALIAS=Route53)
 	$(NO_ECHO)cd workdir; \
 	service=$$(cat service); \
 	module_name=$$(cat module); \
@@ -61,10 +61,10 @@ cpan: workdir/buildspec-api.yml api workdir/requires | workdir
 	$(CPAN_DIST_MAKER) $$PROJECT_ROOT \
 	  $$REQUIRES \
 	  $$DRYRUN \
-	  $$SCANDEPS \
 	  $$NOVERSION \
 	  $$NOCLEANUP \
-	  $$DEBUG -b $$(basename $<) || echo "$$?"
+	  $$DEBUG -b $$(basename $<) || echo "$$?"; \
+	cp $$(ls -1 *.tar.gz) ../
 	rm -rf workdir
 
 api: $(BOTOCORE_PATH) workdir/service workdir/module | workdir
@@ -184,11 +184,11 @@ workdir/module: workdir/service | workdir
 	  echo "$(MODULE_ALIAS)" > $@; \
 	fi
 
-workdir/buildspec-api.yml: buildspec-api.yml.in | workdir
+workdir/buildspec-api.yml: buildspec-api.yml.in workdir/service workdir/module | workdir
 	$(NO_ECHO)test -d workdir || mkdir -p workdir; \
-	service=$$(cat service); \
+	service=$$(cat workdir/service); \
 	GIT=$$(command -v git || true); \
-	module_name=$$(cat module); \
+	module_name=$$(cat workdir/module); \
 	if [[ -z "$$service" ]] && [[ -z "$$module_name" ]]; then \
 	  echo "no SERVICE or MODULE_ALIAS specified - make SERVICE=ecr"; \
 	  false; \
@@ -213,10 +213,4 @@ workdir/buildspec-api.yml: buildspec-api.yml.in | workdir
 	-e "s/@service@/$$module_name/g" \
 	-e "s/@email@/$$EMAIL/g" \
 	-e "s/@name@/$$FULLNAME/g" $< > $@
-	tree workdir
 
-llm-release-notes:
-	$(NO_ECHO)$(MAKE) release-notes; \
-	if [[ -e "release-$(VERSION).diffs" ]]; then \
-	  echo bootstrapper release-notes; \
-	fi

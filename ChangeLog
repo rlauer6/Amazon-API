@@ -1,3 +1,23 @@
+Sat Jul  4 13:19:38 2026  Rob Lauer  <rclauer@gmail.com>
+
+	[2.4.3]:
+	* release-notes: updated
+	* release-notes/release-notes-2.4.3.md: new
+	* .includes/release-notes.mk: updated by CPAN::Maker::Bootstrapper
+	* builder: likewise
+	* README.md.in: need CPAN::Maker 2.0.1
+	* VERSION: bump
+	* build-requires: CPAN::Maker 2.0.1, CPAN::Maker::Bootstraper 2.0.4
+	* cpanfile: sorted
+	* lib/Amazon/API.pm.in
+	- fix pod
+	* project.mk: modified
+	(cpan-dist)
+	- fix dependencies
+	- no $SCANDEPS option anymore
+	- cp tarball to cwd
+	(llm-release-notes): CPAN::Maker::Bootstrapper now handles this
+
 Thu Jul  2 05:25:56 2026  Rob Lauer  <rclauer@gmail.com>
 
 	[2.4.2]:

@@ -3,8 +3,8 @@ Amazon::Credentials
 Carp::Always
 Class::Accessor::Fast
 CLI::Simple 2.0.7
-CPAN::Maker
-CPAN::Maker::Bootstrapper
+CPAN::Maker@2.0.1
+CPAN::Maker::Bootstrapper@2.0.4
 Date::Format
 File::ShareDir
 File::ShareDir::Install
