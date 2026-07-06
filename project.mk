@@ -44,17 +44,15 @@ update-botocore: $(BOTOCORE_PATH)
 workdir/requires: requires.cpan-dist | workdir
 	cp $< $@
 
-.PHONY: cpan
-cpan-dist: workdir/buildspec-api.yml api workdir/service workdir/requires | workdir ## create a CPAN distribution for an AWS API (make SERVICE=route53 MODULE_ALIAS=Route53)
+.PHONY: cpan-dist
+cpan-dist: workdir/buildspec-api.yml workdir/requires | workdir ## create a CPAN distribution for an AWS API (make SERVICE=route53 MODULE_ALIAS=Route53)
 	$(NO_ECHO)cd workdir; \
-	service=$$(cat service); \
-	module_name=$$(cat module); \
+	echo "Creating Amazon::API::$$(cat module)..."; \
 	test -n "$$DEBUG" && set -x; \
 	test -n "$$DEBUG" && DEBUG="--debug"; \
 	test -e requires && REQUIRES="-r requires"; \
 	test -n "$(NOCLEANUP)" && NOCLEANUP="--no-cleanup"; \
 	test -n "$(DRYRUN)" && DRYRUN="--dryrun"; \
-	test -n "$(SCANDEPS)" && SCANDEPS="-s"; \
 	test -n "$(NOVERSION)" && NOVERSION="-n"; \
 	REAL_PATH=$$(realpath .); \
 	PROJECT_ROOT="--project-root $$REAL_PATH"; \
@@ -64,33 +62,47 @@ cpan-dist: workdir/buildspec-api.yml api workdir/service workdir/requires | work
 	  $$NOVERSION \
 	  $$NOCLEANUP \
 	  $$DEBUG -b $$(basename $<) || echo "$$?"; \
-	cp $$(ls -1 *.tar.gz) ../
+	cp $$(ls -1 *.tar.gz) ../; \
 	rm -rf workdir
 
-api: $(BOTOCORE_PATH) workdir/service workdir/module | workdir
-	$(NO_ECHO)cd workdir; \
-	boto_service=$$(cat service); \
-	module_name=$$(cat module); \
+workdir/service.api: $(BOTOCORE_PATH) | workdir
+	$(NO_ECHO)if [[ -z "$(SERVICE)" ]]; then \
+	  echo >&2 "ERROR: no SERVICE specified. usage SERVICE=service MODULE_ALIAS=module-name\n"; \
+	  exit 1; \
+	fi; \
+	service="$(SERVICE)"; \
+	if [[ -z "$(MODULE_ALIAS)" ]]; then \
+	  module_name="$$(echo $(SERVICE) | tr '[:lower:]' '[:upper:]')"; \
+	else \
+	  module_name="$(MODULE_ALIAS)"; \
+	fi; \
+	echo $$service > workdir/service; \
+	echo $$module_name > workdir/module; \
+	service_found="$$(find $(BOTOCORE_PATH)/botocore/data -mindepth 1 -maxdepth 1 -type d -name $$service 2>/dev/null)"; \
+	if [[ -z "$$service_found" ]]; then \
+	  echo >&2 "ERROR: no such service $$service"; \
+	  exit 1; \
+	fi; \
+	cd workdir; \
 	mkdir -p lib; \
 	if test -n "$$TIDY"; then \
 	  TIDY="--tidy"; \
 	fi; \
 	for a in stub shapes; do \
 	  echo "creating...$$a"; \
-	  amazon-api $$TIDY -b $(BOTOCORE_PATH) -s $$boto_service -m $$module_name -o lib create-$$a; \
+	  amazon-api $$TIDY -b $(BOTOCORE_PATH) -s "$$service" -m "$$module_name" -o lib "create-$$a"; \
 	done; \
-	module_path=$$(echo "lib/Amazon/API/$${module_name}.pm" | sed -e 's/::/\//g;'); \
-	echo $$module_path; \
-	service_date=$$(build-boto-services -p $(BOTOCORE_PATH) list $$boto_service | jq -r .date); \
+	module_path="$$(echo lib/Amazon/API/$${module_name}.pm | sed -e 's/::/\//g;')"; \
+	service_date=$$(build-boto-services -p $(BOTOCORE_PATH) list $$service | jq -r .date); \
         service_date="$${service_date//-/.}"; \
-	echo $$service_date; \
 	sed -e 's/[@]SERVICE_VERSION[@]/'$$service_date'/' $$module_path > $${module_path}.tmp; \
 	mv $${module_path}.tmp $${module_path}; \
 	for a in $$(find lib -name '*.pm'); do \
 	  temp="$${a%.pm}"; \
 	  podextract -i $$a -o $$a.tmp -p "$${temp}.pod"; \
 	  mv $$a.tmp $$a; \
-	done
+	done; \
+	cp "lib/$${module_name}.api" $$(basename $@)
 
 BOTOCORE_BASE := $(BOTOCORE_PATH)/botocore/data
 
@@ -120,21 +132,6 @@ query.services:
 workdir:
 	mkdir -p workdir
 
-workdir/service: | workdir
-	$(NO_ECHO)if [[ -n "$(SERVICE)" ]]; then \
-	  echo "$(SERVICE)" | tr [A-Z] [a-z] > $@; \
-	elif [[ -n "$(MODULE_ALIAS)" ]]; then \
-	  echo "$(MODULE_ALIAS)" | tr [A-Z] [a-z] > $@; \
-	else \
-	  echo "ERROR: usage: make MODULE_ALIAS=module or SERVICE=service"; \
-	  false; \
-	fi
-	service=$$(cat $@); \
-	service_found="$$(find botocore/botocore/data -mindepth 1 -maxdepth 1 -type d -name $$service 2>/dev/null)"; \
-	if [[ -z "$$service_found" ]]; then \
-	  echo >&2 "ERROR: no such service $$service"; \
-	  rm -f $@ module && exit 1; \
-	fi
 
 define script
 require Text::ASCIITable;
@@ -177,18 +174,10 @@ service-listing.json: botocore
 	perl -MJSON::XS -e 'while(<>) { chomp; ($$k,$$v) = split /,/,$$_; $$listing{$$k} = $$v; }; print JSON::XS->new->pretty->encode(\%listing);' $$listing >$@; \
 	rm $$listing;
 
-workdir/module: workdir/service | workdir
-	$(NO_ECHO)if test -z "$(MODULE_ALIAS)"; then \
-	  echo "$(SERVICE)" | tr [a-z] [A-Z] > $@; \
-	else \
-	  echo "$(MODULE_ALIAS)" > $@; \
-	fi
-
-workdir/buildspec-api.yml: buildspec-api.yml.in workdir/service workdir/module | workdir
-	$(NO_ECHO)test -d workdir || mkdir -p workdir; \
-	service=$$(cat workdir/service); \
+workdir/buildspec-api.yml: buildspec-api.yml.in workdir/service.api | workdir
+	$(NO_ECHO)service=$$(cat workdir/service 2>/dev/null || true); \
 	GIT=$$(command -v git || true); \
-	module_name=$$(cat workdir/module); \
+	module_name=$$(cat workdir/module 2> /dev/null || true); \
 	if [[ -z "$$service" ]] && [[ -z "$$module_name" ]]; then \
 	  echo "no SERVICE or MODULE_ALIAS specified - make SERVICE=ecr"; \
 	  false; \

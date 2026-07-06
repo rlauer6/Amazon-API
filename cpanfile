@@ -21,7 +21,6 @@ requires "Net::SSLeay", "0";
 requires "Pod::Extract", "0";
 requires "Pod::Find", "0";
 requires "Pod::HTML2Pod", "4.05";
-requires "Pod::Markdown", "";
 requires "Pod::Parser", "0";
 requires "Readonly", "2.05";
 requires "Term::ReadKey", "0";

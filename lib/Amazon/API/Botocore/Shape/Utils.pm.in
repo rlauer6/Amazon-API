@@ -395,7 +395,7 @@ sub param_n {
   }
   else {
     return @param_n
-      if !defined $message || $message eq $EMPTY;
+      if !defined $message;
 
     return "$prefix=$message";
   }
@@ -431,7 +431,8 @@ sub query_param_n {
   }
   else {
     return @param_n
-      if !defined $message || $message eq $EMPTY;
+      if !defined $message;
+
     return "$prefix=$message";
   }
 

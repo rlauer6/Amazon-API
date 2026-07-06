@@ -1,3 +1,21 @@
+Mon Jul  6 13:45:53 2026  Rob Lauer  <rclauer@gmail.com>
+
+	[2.4.4]:
+	* ChangeLog: modified
+	* release-notes: updated
+	* release-notes/release-notes-2.4.4.md: new
+	* README.md: modified
+	* cpanfile: modified
+	* lib/Amazon/API/Botocore/Shape/Utils.pm.in
+	(param_n): don't drop keys that are defined but ''
+	(query_param_n): likewise
+	* project.mk
+	(cpan) => cpan-dist, refactored
+	* requires: -Pod::Markdown
+	* test-requires.skip: +Amazon::API::Boto::Shape::Utils
+	* t/07-query_param_n.t: new
+	* .gitignore: workdir/
+
 Sat Jul  4 13:19:38 2026  Rob Lauer  <rclauer@gmail.com>
 
 	[2.4.3]:

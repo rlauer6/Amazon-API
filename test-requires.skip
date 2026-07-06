@@ -1,2 +1,3 @@
 Amazon::API
 Amazon::API::Signature4
+Amazon::API::Botocore::Shape::Utils
