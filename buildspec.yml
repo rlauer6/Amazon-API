@@ -19,6 +19,7 @@ extra-files:
       - README.md
       - release-notes.md
       - services.api
+      - botocore-metadata.api
 resources:
   bugtracker:
     mailto: rclauer@gmail.com

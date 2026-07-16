@@ -342,7 +342,7 @@ CLEANFILES += \
     module.pm.tmpl \
     release-*.{lst,diffs}
 
-clean: ## removes temporary build artifacts
+clean:: clean-local ## removes temporary build artifacts
 	$(NO_ECHO)rm -f $(CLEANFILES)
 
 .PHONY: basedir

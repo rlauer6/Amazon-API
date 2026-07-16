@@ -4,6 +4,7 @@ requires "CLI::Simple", "2.0.7";
 requires "CLI::Simple::Constants", "2.0.7";
 requires "CLI::Simple::Utils", "2.0.7";
 requires "Class::Accessor::Fast", "0.51";
+requires "File::ShareDir", "1.118";
 requires "HTTP::Request", "7.00";
 requires "HTTP::Request", "7.01";
 requires "HTTP::Tiny", "0.088";

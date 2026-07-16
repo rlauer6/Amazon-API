@@ -1,3 +1,26 @@
+Thu Jul 16 14:11:00 2026  Rob Lauer  <rclauer@gmail.com>
+
+	[2.4.5]:
+	* release-notes: updated
+	* release-notes/release-notes-2.4.4.md: new
+	* VERSION: bump
+	* .gitignore: +bin/amzn-api-module-names, botocore-metadata.api
+	* Makefile: updated by CPAN::Maker::Bootstrapper
+	* buildspec.yml: +botocore-metadata.api
+	* lib/Amazon/API/Botocore.pm.in
+	(find_latest_services): add file to %BOTO_SERVICES
+	(render_stub): create path if it does not exist
+	(fetch_boto_services): add metadata to %BOTO_SERVICES
+	(module_name): new
+	* lib/Amazon/API/Template.pm.in: remove comment
+	* project.mk
+	(botocore-metadata.api): new
+	($CREATE_MODULE_NAMES): new
+	(service.api): use amazon-api module-name utility to get module_name
+	* bin/amzn-api-module-names.in: new
+	* lib/Amazon/API/ModuleNames.pm.in: new
+	* module_names.json: new
+
 Mon Jul  6 13:45:53 2026  Rob Lauer  <rclauer@gmail.com>
 
 	[2.4.4]:

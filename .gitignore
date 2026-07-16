@@ -28,4 +28,5 @@ bin/amazon-api
 bin/build-boto-services
 buildspec.yml.current
 services.api
-
+botocore-metadata.api
+bin/amzn-api-module-names

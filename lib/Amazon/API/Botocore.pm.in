@@ -18,11 +18,14 @@ use Amazon::API::Template qw(:all);
 use Amazon::API::Pod::Parser qw(get_pod_section);
 
 use Carp;
+use CLI::Simple::Utils qw(slurp_json);
 use Cwd;
 use Data::Dumper;
 use English qw( -no_match_vars );
+use File::Basename qw(dirname);
 use File::Find;
 use File::Path qw(make_path);
+use File::ShareDir qw(dist_file);
 use Getopt::Long qw(:config no_ignore_case);
 use JSON;
 use List::MoreUtils qw( first_index );
@@ -31,7 +34,7 @@ use Pod::Usage;
 use Pod::Text;
 use Readonly;
 use charnames qw(:full);
-use Storable qw(nstore);
+use Storable qw(nstore retrieve);
 
 # package constants
 Readonly::Scalar our $BOTO_PATH_OFFSET       => 3;
@@ -51,6 +54,7 @@ our @EXPORT_OK = qw(
   %BOTO_SERVICES
   create_stub
   create_module_name
+  module_name
   create_service_shapes
   fetch_boto_services
   get_service_descriptions
@@ -60,6 +64,7 @@ our @EXPORT_OK = qw(
 our %EXPORT_TAGS = (
   all => [
     qw(
+      module_name
       create_stub
       create_module_name
       create_service_shapes
@@ -272,7 +277,9 @@ sub find_latest_services {
   if ( $date gt $BOTO_SERVICES{$service}->{date} ) {
     $BOTO_SERVICES{$service} = {
       date => $date,
-      path => \@path
+      path => \@path,
+      file => join q{/},
+      @path,
     };
   }
 
@@ -616,6 +623,10 @@ END_OF_POD
       if ( $options{'output-path'} ) {
         my $method_pod_file = sprintf '%s/%s/%s.pod', $options{'output-path'}, $package_name, $method;
 
+        if ( !-d dirname $method_pod_file ) {
+          make_path( dirname $method_pod_file );
+        }
+
         my $template = render_template( $pod_stub, $parameters );
 
         if ( $options{'output-path'} ne $DASH ) {
@@ -716,7 +727,7 @@ sub get_service_descriptions {
 ########################################################################
 sub fetch_boto_services {
 ########################################################################
-  my ($path) = @_;
+  my ( $path, $metadata ) = @_;
 
   if ( !-d "$path/botocore" ) {
     croak <<"END_OF_CROAKING";
@@ -736,6 +747,13 @@ END_OF_CROAKING
 
   if ( !keys %BOTO_SERVICES ) {
     croak 'no services found in path ' . $path;
+  }
+
+  if ($metadata) {
+    foreach ( keys %BOTO_SERVICES ) {
+      my $path = join q{/}, @{ $BOTO_SERVICES{$_}->{path} };
+      $BOTO_SERVICES{$_}->{metadata} = slurp_json($path);
+    }
   }
 
   return keys %BOTO_SERVICES;
@@ -1074,6 +1092,27 @@ HELP
 }
 
 ########################################################################
+sub module_name {
+########################################################################
+  my (%options) = @_;
+
+  my ($metadata_file) = grep { -e $_ } ( 'botocore-metadata.api', dist_file( 'Amazon-API', 'botocore-metadata.api' ) );
+  my ($service)       = @{ $options{'extra-args'} };
+
+  die "ERROR: could not find 'botocore-metadata.api'\n"
+    if !$metadata_file;
+
+  my $meta = retrieve($metadata_file);
+
+  my $module_name = $meta->{$service}{metadata}{metadata}{perl_module_name};
+  ($module_name) = $module_name =~ /::([^:]+)$/xsm;
+
+  print {*STDOUT} $module_name;
+
+  return $TRUE;
+}
+
+########################################################################
 sub main {
 ########################################################################
   my %options = (
@@ -1133,6 +1172,7 @@ sub main {
   }
 
   my %handlers = (
+    'module-name'   => \&module_name,
     'dump-service'  => \&dump_service,
     'dump'          => \&dump_service,
     'describe'      => \&dump_service,
@@ -1240,7 +1280,9 @@ sub new {
 
 =head1 VERSION
 
-Version @program_version@
+Botocore Version @version@
+
+Amazon::API Version @program_version@
 
 =head1 METHODS AND SUBROUTINES
 

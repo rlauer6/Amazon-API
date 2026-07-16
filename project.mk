@@ -7,11 +7,16 @@ BOTOCORE_STATE = $(BUILD_DIR)/.botocore.state
 BOTOCORE_REPO  = https://github.com/boto/botocore.git
 
 BUILD_BOTO_SERVICES = $(BUILD_DIR)/bin/build-boto-services
+CREATE_MODULE_NAMES = $(BUILD_DIR)/bin/amzn-api-module-names
 
 CPAN_DIST_MAKER=cpan-maker
-DEPS += services.api
+DEPS += services.api botocore-metadata.api
 
 $(BUILD_BOTO_SERVICES):
+	cd $(BUILD_DIR); \
+	$(MAKE)
+
+$(CREATE_MODULE_NAMES):
 	cd $(BUILD_DIR); \
 	$(MAKE)
 
@@ -29,6 +34,9 @@ $(BOTOCORE_PATH):
 	mkdir -p $@; \
 	git clone --depth=1 $(BOTOCORE_REPO) $@
 	cd $@
+
+botocore-metadata.api: module_names.json $(BOTOCORE_STATE) $(CREATE_MODULE_NAMES) | $(BOTOCORE_PATH)
+	PERL5LIB=$(PERL5LIB):$(PERL5LIBDIR) $(CREATE_MODULE_NAMES) -b $(BOTOCORE_PATH) create
 
 # services.api only runs if missing or if the botocore dir is newer
 services.api: \
@@ -62,20 +70,16 @@ cpan-dist: workdir/buildspec-api.yml workdir/requires | workdir ## create a CPAN
 	  $$NOVERSION \
 	  $$NOCLEANUP \
 	  $$DEBUG -b $$(basename $<) || echo "$$?"; \
-	cp $$(ls -1 *.tar.gz) ../; \
+	cp $$(ls -1 *.tar.gz) ../
 	rm -rf workdir
 
-workdir/service.api: $(BOTOCORE_PATH) | workdir
+workdir/service.api: $(BOTOCORE_PATH) botocore-metadata.api | workdir
 	$(NO_ECHO)if [[ -z "$(SERVICE)" ]]; then \
-	  echo >&2 "ERROR: no SERVICE specified. usage SERVICE=service MODULE_ALIAS=module-name\n"; \
+	  echo >&2 "ERROR: no SERVICE specified. usage SERVICE=service\n"; \
 	  exit 1; \
 	fi; \
 	service="$(SERVICE)"; \
-	if [[ -z "$(MODULE_ALIAS)" ]]; then \
-	  module_name="$$(echo $(SERVICE) | tr '[:lower:]' '[:upper:]')"; \
-	else \
-	  module_name="$(MODULE_ALIAS)"; \
-	fi; \
+	module_name="$$(amazon-api module-name $$service)"; \
 	echo $$service > workdir/service; \
 	echo $$module_name > workdir/module; \
 	service_found="$$(find $(BOTOCORE_PATH)/botocore/data -mindepth 1 -maxdepth 1 -type d -name $$service 2>/dev/null)"; \
@@ -90,7 +94,7 @@ workdir/service.api: $(BOTOCORE_PATH) | workdir
 	fi; \
 	for a in stub shapes; do \
 	  echo "creating...$$a"; \
-	  amazon-api $$TIDY -b $(BOTOCORE_PATH) -s "$$service" -m "$$module_name" -o lib "create-$$a"; \
+	  amazon-api $$TIDY -b $(BOTOCORE_PATH) --pod -s "$$service" -m "$$module_name" -o lib "create-$$a"; \
 	done; \
 	module_path="$$(echo lib/Amazon/API/$${module_name}.pm | sed -e 's/::/\//g;')"; \
 	service_date=$$(build-boto-services -p $(BOTOCORE_PATH) list $$service | jq -r .date); \
@@ -132,6 +136,8 @@ query.services:
 workdir:
 	mkdir -p workdir
 
+clean-local::
+	rm -rf workdir
 
 define script
 require Text::ASCIITable;
