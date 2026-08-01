@@ -8,7 +8,7 @@ our $VERSION = '@PACKAGE_VERSION@';
 use parent qw(Exporter Class::Accessor::Fast);
 
 use Amazon::API::Constants qw(:chars :booleans);
-use Amazon::API::Botocore::Shape::Utils qw(flatten require_shape check_type check_pattern );
+use Amazon::API::Botocore::Shape::Utils qw(flatten require_shape check_type check_pattern check_enum _check );
 use Amazon::API::NullLogger;
 
 use Carp qw(croak confess);
@@ -16,7 +16,7 @@ use Cwd;
 use Data::Dumper;
 use English qw(-no_match_vars);
 use Readonly;
-use Scalar::Util qw( reftype blessed );
+use Scalar::Util qw( reftype blessed looks_like_number );
 use List::Util qw( any pairs none );
 use JSON::PP;
 
@@ -40,6 +40,8 @@ __PACKAGE__->mk_accessors(
     required
     service
     shape
+    streaming
+    timestampFormat
     type
     _value
   )
@@ -47,6 +49,11 @@ __PACKAGE__->mk_accessors(
 
 our $PROTOCOL;
 our $LOGGER_SOURCE;
+
+# request-side value validation mode (enum/min/max/pattern) is the canonical
+# global $Amazon::API::VALIDATE_MODE: 'strict' (default) croaks, 'warn' carps and
+# passes through, 'off' skips. Amazon::API sets the default; localize it for
+# per-call override:  local $Amazon::API::VALIDATE_MODE = 'off';
 
 ########################################################################
 sub new {
@@ -196,11 +203,10 @@ sub _init_list {
 
   my $value = $self->get__value;
 
-  croak 'more than ' . $self->get_max . ' elements in list'
-    if $self->get_max && @{$value} > $self->get_max;
+  _check( !$self->get_max || @{$value} <= $self->get_max, q{more than } . ( $self->get_max // q{} ) . q{ elements in list} );
 
-  croak 'need at least ' . $self->get_min . ' elements in list'
-    if $self->get_min && @{$value} < $self->get_min;
+  _check( !$self->get_min || @{$value} >= $self->get_min,
+    q{need at least } . ( $self->get_min // q{} ) . q{ elements in list} );
 
   my $class = require_shape( $self->get_member->{shape}, $self->get_service );
 
@@ -223,13 +229,13 @@ sub _init_string {
 
   my $pattern = $self->get_pattern;
 
-  croak 'length of value must be > ' . $self->get_min
-    if $self->get_min && length $value < $self->get_min;
-
-  croak 'length of value must be < ' . $self->get_max
-    if $self->get_max && length $value > $self->get_max;
-
   check_pattern( $value, $pattern );
+
+  check_enum( $value, $self->get_enum );
+
+  _check( !$self->get_min || length $value >= $self->get_min, q{length of value must be >= } . ( $self->get_min // q{} ) );
+
+  _check( !$self->get_max || length $value <= $self->get_max, q{length of value must be <= } . ( $self->get_max // q{} ) );
 
   return $value;
 }
@@ -241,11 +247,9 @@ sub _init_integer {
 
   my $value = $self->get__value;
 
-  croak 'value must be > ' . $self->get_min
-    if defined $self->get_min && $value < $self->get_min;
+  _check( !defined $self->get_min || $value >= $self->get_min, q{value must be >= } . ( $self->get_min // q{} ) );
 
-  croak 'value must be < ' . $self->get_max
-    if defined $self->get_max && $value > $self->get_max;
+  _check( !defined $self->get_max || $value <= $self->get_max, q{value must be <= } . ( $self->get_max // q{} ) );
 
   return $value;
 }
@@ -259,6 +263,14 @@ sub _init_value {
 
   return
     if !$value;
+
+  # timestamp members accept an epoch or any object that can ->epoch
+  # (Time::Piece, DateTime - duck-typed, never loaded here). Coerce to epoch
+  # now so it satisfies the SCALAR guard below and formats downstream.
+  if ( $self->get_type eq 'timestamp' && blessed $value && $value->can('epoch') ) {
+    $value = $value->epoch;
+    $self->set__value($value);
+  }
 
   croak 'ref type of value should be one of SCALAR, ARRAY or HASH'
     if blessed $value && reftype($value) ne 'SCALAR';
@@ -378,6 +390,16 @@ sub finalize {
           if $PROTOCOL && $PROTOCOL =~ /^(?:query|ec2)$/xsm;
 
         return $bool_value ? JSON::PP::true : JSON::PP::false;
+      }
+      elsif ( $type eq 'blob' ) {
+        # value blobs (KMS Plaintext, Kinesis Data, ...) are base64 on the
+        # wire for every protocol. Streaming blobs (an S3 PutObject body)
+        # are the raw payload and must pass through untouched.
+        return $val
+          if !defined $val || $self->get_streaming;
+
+        require MIME::Base64;
+        return MIME::Base64::encode_base64( $val, $EMPTY );  # single line, no breaks
       }
 
       return $val;
@@ -515,6 +537,39 @@ sub finalize_list {
 }
 
 ########################################################################
+sub _format_timestamp {
+########################################################################
+  my ( $value, $format ) = @_;
+
+  return $value
+    if !defined $value;
+
+  # canonicalize input to epoch seconds. Accept epoch (int/float) or any
+  # object that can ->epoch (Time::Piece, DateTime) - duck-typed so we never
+  # load DateTime. Bare strings are refused rather than date-parsed (that is
+  # boto's fragile path); pass an epoch or a Time::Piece/DateTime.
+  my $epoch
+    = ( blessed $value && $value->can('epoch') ) ? $value->epoch
+    : looks_like_number($value)                  ? $value
+    :   croak "timestamp: expected epoch seconds or a Time::Piece/DateTime, got '$value'\n";
+
+  return $epoch + 0
+    if $format eq 'unixTimestamp';
+
+  my @g = gmtime int $epoch;
+
+  return sprintf '%04d-%02d-%02dT%02d:%02d:%02dZ', $g[5] + 1900, $g[4] + 1, $g[3], $g[2], $g[1], $g[0]
+    if $format eq 'iso8601';
+
+  # rfc822 - explicit English names (locale-independent), matches boto's
+  # email.utils.formatdate(usegmt=True): "Wed, 17 Jun 2015 22:11:58 GMT"
+  my @dow = qw(Sun Mon Tue Wed Thu Fri Sat);
+  my @mon = qw(Jan Feb Mar Apr May Jun Jul Aug Sep Oct Nov Dec);
+
+  return sprintf '%s, %02d %s %04d %02d:%02d:%02d GMT', $dow[ $g[6] ], $g[3], $mon[ $g[4] ], $g[5] + 1900, $g[2], $g[1], $g[0];
+}
+
+########################################################################
 sub finalize_structure {
 ########################################################################
   my ($self) = @_;
@@ -550,7 +605,25 @@ sub finalize_structure {
 
     my $value = $self->get__value->{$member};
 
-    $output->{$member_name} = blessed $value && $value->can('finalize') ? $value->finalize : $value;
+    if ( blessed $value && $value->can('get_type') && $value->get_type eq 'timestamp' ) {
+      # resolve the effective wire format, most-specific first:
+      #   member timestampFormat -> shape timestampFormat -> location default
+      #   (header=>rfc822, querystring=>iso8601) -> protocol body default
+      #   (json/rest-json=>unixTimestamp, else iso8601).
+      my $location = $members->{$member}->{location} // $EMPTY;
+
+      my $format = $members->{$member}->{timestampFormat} // $value->get_timestampFormat // (
+          $location eq 'header'                ? 'rfc822'
+        : $location eq 'querystring'           ? 'iso8601'
+        : ( $PROTOCOL // $EMPTY ) =~ /json/xsm ? 'unixTimestamp'
+        :                                        'iso8601'
+      );
+
+      $output->{$member_name} = _format_timestamp( $value->get__value, $format );
+    }
+    else {
+      $output->{$member_name} = blessed $value && $value->can('finalize') ? $value->finalize : $value;
+    }
   }
 
   return $output;

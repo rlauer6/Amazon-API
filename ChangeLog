@@ -1,8 +1,78 @@
+Sat Aug  1 13:57:18 2026  Rob Lauer  <rclauer@gmail.com>
+
+	[2.4.6]:
+	* release-notes: updated
+	* release-notes/release-notes-2.4.6.md: new
+	* VERSION: bump
+	* .gitignore: updated by CPAN::Maker::Bootstrapper
+	* .includes/git.mk: likewise
+	* .includes/perl.mk: likewise
+	* .includes/release-notes.mk: likewise
+	* .includes/update.mk: likewise
+	* .includes/modulino.mk: likewise
+	* Makefile: likewise
+	* builder: likewise
+	* cpanfile: likewise
+	* recommends: likewise
+	* requires: likewise
+	* deps.mk: likewise
+	* .includes/bash-completion.mk: new
+	* lib/Amazon/API.pm.in
+	- POD updates explaining validation
+	- added botocore_request_headers accessors to support header loading/unloading
+	- VALIDATE_MODE support for controlling parameter validation level
+	(decode_response)
+	- XML::Simple => requires
+	- unload header parameters
+	(init_botocore_request)
+	- load header parameters
+	(_resolve_request_content): new
+	(serialize_content): provide empty body for json requests
+	(submit)
+	- apply header-located request members
+	(generate_xml)
+	- guard against multiple root elements
+	* lib/Amazon/API/Botocore/Shape.pm.in
+	- add accessors for streaming, timestampFormat
+	(_init_list)
+	- run checks through _check()
+	(_init_string): likewise
+	(_init_integer): likewise
+	(_init_value): resolve timestamp values
+	(finalize)
+	- handle blobs more fully
+	(_format_timestamp): new
+	(finalize_structure)
+	- fnalize timestamps based on timestampFormat
+	* lib/Amazon/API/Botocore/Shape/Serializer.pm.in
+	(serialize): handle blobs more fully
+	* lib/Amazon/API/Botocore/Shape/Utils.pm.in
+	(check_enum): new
+	(_check): new
+	(check_pattern): run through _check()
+	* lib/Amazon/API/Error.pm.in
+	- remove use of Module:Loa
+	(_set_message): require XML::Simple
+	* lib/Amazon/API/HTTP/Response.pm.in
+	(headers): return lc version of headers always
+	* project.mk
+	(install): new
+	* deps.mk: new
+	* suggests: new
+	* t/05-rest-xml-nonpayload.t: new
+	* t/06-content-resolution.t: new
+	* t/07-get-empty-body.t: new
+	* t/08-rest-xml-header.t: new
+	* t/09-blob-and-statuscode.t: new
+	* t/10-timestamp.t: new
+	* t/11-value-validation.t: new
+
+
 Thu Jul 16 14:11:00 2026  Rob Lauer  <rclauer@gmail.com>
 
 	[2.4.5]:
 	* release-notes: updated
-	* release-notes/release-notes-2.4.4.md: new
+	* release-notes/release-notes-2.4.5.md: new
 	* VERSION: bump
 	* .gitignore: +bin/amzn-api-module-names, botocore-metadata.api
 	* Makefile: updated by CPAN::Maker::Bootstrapper

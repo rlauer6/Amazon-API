@@ -6,7 +6,6 @@ use warnings;
 use Data::Dumper;
 use English qw( -no_match_vars );
 use JSON qw( decode_json );
-use Module::Load;
 use Scalar::Util qw( reftype );
 
 __PACKAGE__->follow_best_practice;
@@ -64,7 +63,7 @@ sub _set_message {
   if ($raw_message) {
 
     if ( $self->get_content_type =~ /xml/xmsi ) {
-      load 'XML::Simple';
+      require XML::Simple;
       $message = eval { return XML::Simple::XMLin($raw_message); };
     }
     elsif ( $self->get_content_type =~ /json/xmsi ) {
@@ -77,20 +76,20 @@ sub _set_message {
 
       if ( !$message || $EVAL_ERROR ) {
         if ( $raw_message =~ /^\s*\</xsm ) {
-          load 'XML::Simple';
+          require XML::Simple;
           $message = eval { return XML::Simple::XMLin($raw_message); };
         }
       }
-    } ## end if ( !$message || $EVAL_ERROR)
+    }
 
-  } ## end if ($raw_message)
+  }
 
   $message = $message || $raw_message;
 
   $self->set_response($message);
 
   return $message;
-} ## end sub _set_message
+}
 
 ###############################################################
 sub get_aws_api {

@@ -52,6 +52,7 @@ __PACKAGE__->mk_accessors(
     api_methods
     botocore_metadata
     botocore_operations
+    botocore_request_headers
     botocore_shapes
     content_type
     credentials
@@ -91,6 +92,8 @@ __PACKAGE__->mk_accessors(
 );
 
 our $VERSION = '@PACKAGE_VERSION@'; ## no critic (RequireInterpolationOfMetachars)
+
+our $VALIDATE_MODE = 'strict';
 
 our @EXPORT_OK = qw(
   create_urlencoded_content
@@ -739,7 +742,7 @@ sub decode_response {
           #          $self->get_force_array ? ( ForceArray => ['item'] ) : ()
         );
       }
-    };
+    }; ## scandeps: requires
 
     # disregard content_type (it might be misleading?)
     # this is almost certainly going to be a problem somewhere...
@@ -818,6 +821,33 @@ sub decode_response {
     elsif ($EVAL_ERROR) {
       carp "error serializing content: please report this error\n$EVAL_ERROR";
       $content = $orig_content;
+    }
+  }
+
+  # header-located output members (e.g. GetDistributionConfig's ETag) never
+  # appear in the body - they arrive only as HTTP response headers. Lift them
+  # out of the response and into the result, keyed by member name, so callers
+  # can read $result->{ETag} to feed the next IfMatch. This is the receive-side
+  # mirror of the send-side header extraction in init_botocore_request.
+  my $output_members = $self->get_botocore_shapes->{ $output->{shape} }->{members} // {};
+
+  if ( ref $content eq 'HASH' ) {
+    foreach my $member ( keys %{$output_members} ) {
+      my $spec     = $output_members->{$member};
+      my $location = $spec->{location} // $EMPTY;
+
+      if ( $location eq 'header' ) {
+        my $value = $response->header( $spec->{locationName} // $member );
+
+        if ( defined $value ) {
+          $content->{$member} = $value;
+        }
+      }
+      elsif ( $location eq 'statusCode' ) {
+        # the HTTP status is a data member for some rest-json outputs and,
+        # like a header member, never appears in the body.
+        $content->{$member} = $response->code;
+      }
     }
   }
 
@@ -1188,6 +1218,29 @@ sub init_botocore_request {
           $uri = sprintf '%s?%s', $uri, create_urlencoded_content( \%query_parameters );
         }
 
+        # header-located members (e.g. UpdateDistribution's IfMatch ->
+        # If-Match) are carried in the HTTP request headers, NOT the body.
+        # Extract them here - like uri and querystring members above - so the
+        # body serializer sees only the payload/body members. Leaving a header
+        # member in place puts it in the body: for rest-xml that is a second
+        # root element alongside the payload (two roots -> generate_xml croaks
+        # / AWS MalformedInput), and its value never reaches the wire header.
+        my %header_parameters;
+
+        foreach my $p ( keys %{$shape_parameters} ) {
+          if ( my $header_name = $self->is_param_type( $request_shape_name, $p, 'header' ) ) {
+            my $val = $shape_parameters->{$p};
+
+            if ( defined $val ) {
+              $header_parameters{$header_name} = $val;
+            }
+
+            delete $shape_parameters->{$p};
+          }
+        }
+
+        $self->set_botocore_request_headers( \%header_parameters );
+
         if ( !keys %{$shape_parameters} ) {
           %parameters = ();
         }
@@ -1222,24 +1275,7 @@ sub init_botocore_request {
     }
   }
 
-  my $content;
-
-  if ( $request_shape_name && $protocol =~ /rest\-(json|xml)/ ) {
-    # unwrap — the shape name wrapper was only needed to route URI/query params;
-    # the body is just the remaining members of the inner hash
-    my $inner = $parameters{$request_shape_name};
-    $content = ( $inner && keys %{$inner} ) ? $inner : undef;
-  }
-  else {
-    $content = \%parameters;
-    if ( $method ne 'POST' && !keys %parameters ) {
-      $content = undef;
-    }
-  }
-
-  if ( $method ne 'POST' && !keys %parameters ) {
-    $content = undef;
-  }
+  my $content = $self->_resolve_request_content( $request_shape_name, $protocol, $method, \%parameters );
 
   $self->get_logger->debug(
     sub {
@@ -1259,6 +1295,80 @@ sub init_botocore_request {
 # namespaces may be buried a bit in the members specfication of
 # request objects or can be part of the specification for the request
 # method itself (cloudfront.CreateInvalidationBatch)
+########################################################################
+# _resolve_request_content( $request_shape_name, $protocol, $method, \%parameters )
+#
+# Resolves the request body ("content") from the built parameter hash,
+# per protocol. Extracted from init_botocore_request so the
+# body-serialization decision can be unit-tested in isolation (see
+# t/06-content-resolution.t) without credentials, network, shape
+# building, or URI construction. Returns a hashref (the body), or undef
+# when there is no body to send.
+#
+#   - rest-xml, no payload : shape-name IS the root element -> wrap inner
+#                            under the shape name (xmlns rides the root)
+#   - rest-xml, payload    : payload member IS the root      -> inner as-is
+#   - rest-json            : body is the inner members       -> inner as-is
+#   - json / query / ec2   : body is the flat parameter hash -> \%parameters
+#   - non-POST, no params  : no body                          -> undef
+########################################################################
+sub _resolve_request_content {
+########################################################################
+  my ( $self, $request_shape_name, $protocol, $method, $parameters ) = @_;
+
+  my $content;
+
+  if ( $request_shape_name && $protocol =~ /rest\-(json|xml)/xsm ) {
+    my $inner = $parameters->{$request_shape_name};
+
+    if ( !$inner || !keys %{$inner} ) {
+      $content = undef;
+    }
+    else {
+      # A payload-style request (e.g. S3 PutBucketWebsite) puts the body
+      # root at the payload member, so we unwrap to the inner members and
+      # the payload member becomes the single root element. A non-payload
+      # rest-xml request (e.g. Route53 ChangeResourceRecordSets) has no
+      # payload member: the request-shape name itself is the body's root
+      # element and carries the xmlns. We must NOT unwrap past it, or the
+      # namespace (attached as _attr on the wrapper) ends up as a sibling
+      # <_attr> element and we emit two roots -> MalformedInput from AWS.
+      my $shape_def      = $self->get_botocore_shapes->{$request_shape_name} // {};
+      my $payload_member = $shape_def->{payload};
+      if ( $payload_member && $protocol =~ /rest\-xml/xsm ) {
+        # rest-xml WITH a payload member: only that member is the body, and
+        # its locationName is the single root element. Sibling members bound
+        # to the header (IfMatch -> If-Match) or uri (Id) must not serialize
+        # into the body, or generate_xml sees two roots. CreateDistribution
+        # has only the payload member so it already sent a single root;
+        # UpdateDistribution adds IfMatch/Id, which is what hit the guard.
+        my $members   = $shape_def->{members}                       // {};
+        my $root_name = $members->{$payload_member}->{locationName} // $payload_member;
+        $content = { $root_name => $inner->{$payload_member} };
+      }
+      elsif ( $protocol =~ /rest\-xml/xsm ) {
+        my $root_name = $shape_def->{locationName} // $request_shape_name;
+        $content = { $root_name => $inner };
+      }
+      else {
+        $content = $inner;
+      }
+    }
+  }
+  else {
+    # non-rest protocols (plain json, query, ec2): the body is the flat
+    # parameter hash. Dropping this branch sends an empty body to JSON
+    # services -> SerializationException.
+    $content = $parameters;
+  }
+
+  if ( $method ne 'POST' && !keys %{$parameters} ) {
+    $content = undef;
+  }
+
+  return $content;
+}
+
 ########################################################################
 sub find_namespace {
 ########################################################################
@@ -1312,17 +1422,31 @@ sub serialize_content {
     $parameters //= [];
     $content = create_urlencoded_content( $parameters, $action, $version );
   }
-  elsif ( $parameters && ref $parameters && reftype($parameters) eq 'HASH' ) {
-    if ( $content_type =~ /json/xsm ) {
-      delete $parameters->{_attr};
-      $content = encode_json($parameters);
-    }
-    elsif ( $content_type =~ /xml/xms ) {
-      return
-        if !ref $content || !keys %{$content};
+  elsif ( $content_type =~ /json/xsm ) {
+    # JSON services require at least an empty object as the body; a bare
+    # empty string (from undef/empty/non-hash parameters) is rejected with
+    # SerializationException. Floor to {} so we always emit valid JSON.
+    $parameters = {}
+      if !$parameters || !ref $parameters || reftype($parameters) ne 'HASH';
 
-      $content = $self->generate_xml($parameters);
-    }
+    delete $parameters->{_attr};
+
+    # A GET carries no body. Flooring an empty GET to {} here would be
+    # appended to the URI by _set_request_content as a spurious '?{}'
+    # query string, which is then covered by the SigV4 canonical request
+    # -> InvalidSignatureException. Only emit a JSON body when we are
+    # actually sending one; the {} floor remains for body-bearing
+    # methods (POST/PUT), where an empty body must still be valid JSON.
+    $content
+      = ( $self->get_http_method eq 'GET' && !keys %{$parameters} )
+      ? undef
+      : encode_json($parameters);
+  }
+  elsif ( $parameters && ref $parameters && reftype($parameters) eq 'HASH' && $content_type =~ /xml/xms ) {
+    return
+      if !keys %{$parameters};
+
+    $content = $self->generate_xml($parameters);
   }
 
   return $content;
@@ -1638,6 +1762,19 @@ sub submit {
 
   my $request = HTTP::Request->new( $method, $url, $headers );
 
+  # apply header-located request members extracted in init_botocore_request
+  # (e.g. If-Match) before signing so they are part of the signed request.
+  # One-shot: clear the stash so it cannot leak into a subsequent call.
+  my $botocore_request_headers = $self->get_botocore_request_headers;
+
+  if ($botocore_request_headers) {
+    foreach my $header_name ( sort keys %{$botocore_request_headers} ) {
+      $request->header( $header_name => $botocore_request_headers->{$header_name} );
+    }
+
+    $self->set_botocore_request_headers(undef);
+  }
+
   # 1. set the header
   # 2. set the content
   # 3. sign the request
@@ -1693,9 +1830,15 @@ sub generate_xml {
 
   require XML::Twig;
 
-  my @elements;
+  my @root_keys = keys %{$data};
 
-  for my $key ( keys %{$data} ) {
+  croak sprintf
+    "generate_xml: refusing to emit malformed XML with %d root elements (%s); a request body must have exactly one root\n",
+    scalar @root_keys, join q{, }, sort @root_keys
+    if @root_keys > 1;
+
+  my @elements;
+  for my $key (@root_keys) {
     push @elements, _to_xml( $key, $data->{$key} );
   }
 
@@ -2518,6 +2661,69 @@ the truthiness and then test the presence of content.
 
   if ( $result->{$key} && %{result->{$key}} ) 
 
+The above concerns the I<response> side. For validation of the values
+you send, see L</Request Validation> below.
+
+=head2 Request Validation
+
+Botocore shape definitions carry more than structure -- many members
+declare value constraints: an C<enum> of permitted strings, a C<min>
+and C<max> (length for strings, magnitude for numbers, element count
+for lists), and a regular-expression C<pattern>. Starting with version
+2.4.6, a Botocore request validates the values you supply against
+these constraints B<before> the request is serialized and sent, so a
+bad value is caught locally -- with the offending parameter named --
+rather than surfacing as an opaque C<InvalidParameterValue> from AWS
+several layers away.
+
+Validation is controlled by the package variable
+C<$Amazon::API::VALIDATE_MODE>, which takes one of three values:
+
+=over 4
+
+=item * C<strict> (the default)
+
+An invalid value throws an exception naming the parameter, the value,
+and -- for an C<enum> -- the list of permitted values.
+
+=item * C<warn>
+
+An invalid value emits a warning and the request proceeds unchanged.
+
+=item * C<off>
+
+Constraints are not checked.
+
+=back
+
+Because the constraint data is only as current as the Botocore
+metadata this client was generated from, C<strict> is deliberately
+safe against staleness: the exception it raises tells you how to
+relax the mode. If AWS has added an C<enum> value (or loosened a
+bound) since your metadata was built, C<strict> will reject a value
+that is in fact now valid -- so the message points you at C<warn> and
+C<off> as the escape hatch. This is the same posture the scanner takes
+toward unrecognized members: act on the metadata you have, but never
+let a point-in-time snapshot become a hard wall.
+
+The mode is a package global, so set it once to change the default for
+every request:
+
+ $Amazon::API::VALIDATE_MODE = 'warn';
+
+or localize it to relax validation for a single call while leaving the
+global default intact:
+
+ {
+   local $Amazon::API::VALIDATE_MODE = 'off';
+   $ec2->RunInstances( \%params );
+ }
+
+Validation applies only to B<Botocore requests> -- requests built from
+generated service classes, where the shape constraints are
+available. A request you construct by hand (the Luddite approach) is
+sent as-is.
+
 =head1 ERRORS
 
 When an error is returned from an API request, an exception class
@@ -3081,6 +3287,12 @@ the AWS API for the service you are are calling.>
 
 =back
 
+Request-side value validation (C<enum>, C<min>/C<max>, C<pattern>) is
+enforced against the Botocore metadata this client was built from,
+which is a point-in-time snapshot. See L</Request Validation> for how
+C<$Amazon::API::VALIDATE_MODE> governs this and how to relax it if the
+metadata has fallen behind the live API.
+
 =head1 IMPLEMENTATION NOTES
 
 If you have taken the advice above and created classes using the
@@ -3477,6 +3689,16 @@ any current bugs and now consider this project "production ready".
 
 It's simple. And it seems easier to build than other modules that
 almost do the same thing.
+
+=head2 How do I stop the client from rejecting a parameter value?
+
+If a request dies with a validation error naming an C<enum>, length,
+or pattern constraint, the value you passed does not match this
+client's Botocore metadata. Most often that is a typo. If instead AWS
+has changed the API since your metadata was generated, relax
+validation with C<$Amazon::API::VALIDATE_MODE> -- set it to C<warn> to
+downgrade the error to a warning, or C<off> to skip the check. See
+L</Request Validation>.
 
 =head2 I tried to use this with XYZ service and it didn't work. What should do I do?
 

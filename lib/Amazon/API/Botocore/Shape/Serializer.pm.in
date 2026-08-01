@@ -569,7 +569,18 @@ sub serialize {
       return { $this->{locationName} => $serialize };
     },
     blob => sub {
-      return $data;
+      # value blobs arrive base64-encoded and decode back to bytes; streaming
+      # blobs are the raw body and pass through untouched (mirror of the send
+      # side in Amazon::API::Botocore::Shape::finalize).
+      if ( ref $data ) {
+        $data = $data->{content};
+      }
+
+      return $data
+        if !defined $data || $this->{streaming};
+
+      require MIME::Base64;
+      return MIME::Base64::decode_base64($data);
     },
     timestamp => sub {
       $data = ref $data ? $data->{content} : $data;

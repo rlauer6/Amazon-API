@@ -1,4 +1,5 @@
 workdir/
+**/*.checked
 **/*.sh
 module.pm.tmpl
 buildspec.yml.tmpl
@@ -30,3 +31,7 @@ buildspec.yml.current
 services.api
 botocore-metadata.api
 bin/amzn-api-module-names
+**/*.pl
+**/*.pm
+**/*.raw
+extra-files.mk

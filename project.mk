@@ -209,3 +209,7 @@ workdir/buildspec-api.yml: buildspec-api.yml.in workdir/service.api | workdir
 	-e "s/@email@/$$EMAIL/g" \
 	-e "s/@name@/$$FULLNAME/g" $< > $@
 
+
+.PHONY: install
+install: $(TARBALL)
+	cpanm -n -v -l $(HOME) $<

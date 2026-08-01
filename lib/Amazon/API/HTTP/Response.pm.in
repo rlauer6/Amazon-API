@@ -26,4 +26,16 @@ sub is_success { return $_[0]->{response}{success} }
 sub code       { return $_[0]->{response}{status} }
 sub message    { return $_[0]->{response}{reason} }
 
+sub headers { return $_[0]->{response}{headers} // {} }
+
+########################################################################
+sub header {
+########################################################################
+  my ( $self, $name ) = @_;
+
+  # HTTP::Tiny lowercases response header names (see content_type above),
+  # so fold the requested name to match a botocore locationName like 'ETag'.
+  return $self->{response}{headers}{ lc $name };
+}
+
 1;

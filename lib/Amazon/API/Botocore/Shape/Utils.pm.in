@@ -20,6 +20,8 @@ our @EXPORT_OK = qw(
   create_shape
   create_module_name
   check_pattern
+  check_enum
+  _check
   check_type
   flatten
   get_service_from_class
@@ -239,11 +241,50 @@ sub check_pattern {
   };
 
   if ( !$EVAL_ERROR ) {
-    croak "value must match pattern [$pattern]"
-      if $value !~ /$pattern/sm;
+    my $matched = $value =~ /$pattern/sm;
+    return _check( $matched, "value must match pattern [$pattern]" );
   }
 
   return $TRUE;
+}
+
+########################################################################
+sub check_enum {
+########################################################################
+  my ( $value, $enum ) = @_;
+
+  return $TRUE
+    if !$enum || !@{$enum};  # no constraint present - nothing to check
+
+  return _check(
+    ( any { $_ eq $value } @{$enum} ),
+    sprintf q{value [%s] is not one of the allowed values: %s},
+    $value, join q{, }, @{$enum}
+  );
+}
+
+########################################################################
+sub _check {
+########################################################################
+  my ( $ok, $message ) = @_;
+
+  return $TRUE
+    if $ok;
+
+  my $mode = $Amazon::API::VALIDATE_MODE // q{strict};
+
+  return $TRUE
+    if $mode eq q{off};
+
+  if ( $mode eq q{warn} ) {
+    carp "$message\n";
+    return $TRUE;
+  }
+
+  croak sprintf qq{%s\nIf the AWS API has changed since this client's Botocore }
+    . qq{metadata was generated, set }
+    . qq{\$Amazon::API::VALIDATE_MODE to 'warn' or 'off' }
+    . qq{(or rebuild the metadata).\n}, $message;
 }
 
 ########################################################################

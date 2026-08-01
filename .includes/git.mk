@@ -19,11 +19,11 @@ RECOMMENDED_ARTIFACTS = \
      .prompts/
 
 .PHONY: git
-git: ## initializes a git repository and commits the recommended artifacts
-	$(MAKE) clean
-	git init -b main; \
-	date +'%a %b %d %H:%M:%S  $(GIT_NAME)  $(GIT_EMAIL)' >ChangeLog
-	echo -e "\n\t[1.0.0]:\n" >>ChangeLog
+git: ## initializes a git repository and commits artifacts (NO_COMMIT=1 to stop commit)
+	$(NO_ECHO)$(MAKE) clean; \
+	git init -b main >/dev/null; \
+	date +'%a %b %d %H:%M:%S  $(GIT_NAME)  $(GIT_EMAIL)' >ChangeLog; \
+	echo -e "\n\t[1.0.0]:\n" >>ChangeLog; \
 	for f in $(RECOMMENDED_ARTIFACTS); do \
 	  if test -e "$$f" || test -d "$$f"; then \
 	    git add "$$f"; \
@@ -35,5 +35,20 @@ git: ## initializes a git repository and commits the recommended artifacts
 	done; \
 	sort $$changelog_files >>ChangeLog; \
 	git add ChangeLog; \
-	git commit -m 'BigBang'
+	if [[ -z "$$NO_COMMIT" ]]; then \
+	  commit -m 'BigBang'; \
+	fi
 
+repo: ## creates a new GitHub repository
+	@if [[ -z "$(GITHUB_ACTIONS)" ]]; then \
+	  echo "gha-aws is not available: cpan GitHub::Actions::AWS"; \
+	  exit 1; \
+	fi; \
+	if [[ -z "$REPO" ]]; then \
+	  echo "usage: make repo REPO=repo-name PUBLIC=1"; \
+	  exit 1; \
+	fi; \
+	if [[ -n "$$PUBLIC"; then \
+	  PUBLIC="--public"; \
+	fi; \
+	$(GITHUB_ACTIONS) $$PUBLIC --repo $$REPO
