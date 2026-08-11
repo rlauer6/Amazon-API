@@ -1,0 +1,10 @@
+package Amazon::API::BuildInfo;
+
+use strict;
+use warnings;
+
+our $GIT_SHA   = '@GIT_SHA@';
+our $GIT_DIRTY = '@GIT_DIRTY@';
+our $VERSION   = '@PACKAGE_VERSION@';
+
+1;

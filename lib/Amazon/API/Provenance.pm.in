@@ -1,0 +1,852 @@
+package Amazon::API::Provenance;
+
+use strict;
+use warnings;
+
+use Amazon::API::BuildInfo;
+use Amazon::API;
+use Amazon::API::Botocore;
+
+use CLI::Simple::Constants qw(:booleans);
+use CLI::Simple::Utils qw(slurp_json choose slurp);
+use Cwd qw(getcwd);
+use Data::Dumper;
+use Digest::SHA qw(sha256_hex);
+use English qw(-no_match_vars);
+use File::Basename qw(basename);
+use JSON;
+use MIME::Base64 qw(decode_base64 encode_base64);
+use Storable qw(retrieve);
+
+use Role::Tiny::With;
+with 'Amazon::API::Provenance::Role::KMS';
+with 'Amazon::API::Provenance::Role::SSM';
+
+use Readonly;
+Readonly::Scalar our $KEY_ALIAS         => 'alias/provenance-signing';
+Readonly::Scalar our $DEFAULT_KEY_SPEC  => 'ECC_NIST_P256';
+Readonly::Scalar our $DEFAULT_KEY_USAGE => 'SIGN_VERIFY';
+Readonly::Scalar our $SIGNING_ALGORITHM => 'ECDSA_SHA_256';
+
+__PACKAGE__->use_log4perl( level => 'info' );
+
+use parent qw(CLI::Simple);
+
+caller or exit __PACKAGE__->main;
+
+########################################################################
+sub cmd_create_provenance {
+########################################################################
+  my ($self) = @_;
+
+  my $service = $self->get_service;
+
+  die
+    "ERROR: usage: --service [--key-spec --key-usage --key-alias --input-path --output-path] --service service create-provenance\n"
+    if !$service;
+
+  my $key_alias = $self->_validate_key_alias;
+
+  my $input_path = $self->get_input_path // getcwd;
+
+  my $botocore_version = slurp_json( sprintf '%s/%s', $input_path, 'botocore-version.json' );
+
+  my $services = retrieve( sprintf '%s/%s', $input_path, 'botocore-metadata.api' );
+
+  my $service_meta = $services->{$service};
+
+  my $module_name = Amazon::API::Botocore::_module_name($service);
+
+  my %provenance_record = (
+    'provenance_version'              => 1,
+    'hash_algo'                       => 'sha256',
+    'botocore'                        => $botocore_version,
+    'service-2.json'                  => $service_meta->{service_2_digest},
+    'paginators-1.json'               => $service_meta->{paginators_1_digest},
+    'Amazon::API::BuildInfo::GIT_SHA' => $Amazon::API::BuildInfo::GIT_SHA,
+    'Amazon::API::BuildInfo::VERSION' => $Amazon::API::BuildInfo::VERSION,
+    'module_name'                     => $module_name,
+    'service'                         => sprintf( '%s/%s', $service, $service_meta->{date} ),
+  );
+
+  my $digest_meta = $self->_create_tarball_digest($module_name);
+  %provenance_record = ( %provenance_record, %{$digest_meta} );
+
+  my $provenance_record_to_sign = JSON->new->pretty->canonical->encode( \%provenance_record );
+
+  my $basename = basename( $provenance_record{tarball}, '.tar.gz' );
+
+  $self->_write_provenance_record( $provenance_record_to_sign, $basename );
+
+  $self->_sign_provenance_record( $provenance_record_to_sign, $basename );
+
+  my $verify_rsp = eval { return $self->_verify_provenance( $key_alias, $basename ); };
+
+  die "ERROR: unable to verify provenance files\n$EVAL_ERROR"
+    if !$verify_rsp || $EVAL_ERROR;
+
+  if ( !$verify_rsp->{SignatureValid} ) {
+    print {*STDERR} "ERROR: verification failed.\n";
+    return $FAILURE;
+  }
+
+  my @provenance_files = glob "$basename.*";
+  print {*STDOUT} sprintf "%s\n", join "\n", @provenance_files;
+
+  return $SUCCESS;
+}
+
+########################################################################
+sub cmd_sign {
+########################################################################
+  my ($self) = @_;
+
+  my ($key_id) = $self->get_key_id // $self->get_key_alias;
+
+  my ($message) = $self->get_args;
+
+  if ( $message =~ /^file:\/\/(.*)$/xsm ) {
+    my $file = $1;
+    die "ERROR: $file not found or is not readable\n"
+      if !-f $file || !-r $file;
+
+    $message = slurp($1);
+
+    die sprintf "ERROR: message be <= 4096 character. Length of message: %s\n", length $message
+      if length $message > 4096;
+  }
+
+  die "ERROR: usage sign --key-alias alias [--key-id id --signing-algorith] message\n"
+    if !$key_id || !$message;
+
+  my $rsp = $self->_get_kms->Sign(
+    { Message          => $message,
+      SigningAlgorithm => $self->get_signing_algorithm,
+      KeyId            => $key_id,
+      MessageType      => 'RAW',
+    }
+  );
+
+  my $fh = choose {
+    return *STDOUT
+      if !$self->get_output_path;
+
+    open my $ofh, '>', $self->get_output_path
+      or die sprintf "ERROR: could not open %s for writing\n%s", $self->get_output_path, $EVAL_ERROR;
+
+    return $ofh;
+  };
+
+  print {$fh} $rsp->{Signature};
+
+  close $fh;
+
+  return $SUCCESS;
+}
+
+########################################################################
+sub cmd_verify {
+########################################################################
+  my ($self) = @_;
+
+  my ($key_id) = $self->get_key_id // $self->get_key_alias;
+
+  my ($message) = $self->get_args;
+
+  die "ERROR: usage: verify --signature-file signature-file [--signing-algorithm] message\n"
+    if !$self->get_signature_file || !$message;
+
+  my $signature = slurp( $self->get_signature_file );
+
+  if ( $message =~ /^file:\/\/(.*)$/xsm ) {
+    my $file = $1;
+    die "ERROR: $file not found or is not readable\n"
+      if !-f $file || !-r $file;
+
+    $message = slurp($1);
+
+    die sprintf "ERROR: message be <= 4096 character. Length of message: %s\n", length $message
+      if length $message > 4096;
+  }
+
+  my $rsp = $self->_get_kms->Verify(
+    { KeyId            => $key_id,
+      Message          => $message,
+      MessageType      => 'RAW',
+      SigningAlgorithm => $self->get_signing_algorithm,
+      Signature        => $signature,
+    }
+  );
+
+  print {*STDOUT} JSON->new->pretty->encode($rsp);
+
+  return $SUCCESS;
+}
+
+########################################################################
+sub cmd_create_key {
+########################################################################
+  my ($self) = @_;
+
+  my ($key_alias) = $self->get_args;
+  $key_alias //= $self->get_key_alias;
+
+  die "ERROR: usage: create-key [--key-spec --key-usage] key-alias\n"
+    if !$key_alias;
+
+  if ( $key_alias !~ /^alias\//xsm ) {
+    $key_alias = "alias/$key_alias";
+    warn "WARNING: alias will be set as $key_alias\n";
+  }
+
+  my $rsp = eval {
+    return $self->_kms_create_key(
+      key_spec    => $self->get_key_spec        // $DEFAULT_KEY_SPEC,
+      key_usage   => $self->get_key_usage       // $DEFAULT_KEY_USAGE,
+      description => $self->get_key_description // $key_alias,
+    );
+  };
+
+  die "ERROR: could not create $key_alias\n$EVAL_ERROR"
+    if !$rsp || $EVAL_ERROR;
+
+  my $key_id = $rsp->{KeyMetadata}{KeyId};
+
+  my $alias_rsp = eval { $self->_kms_create_alias( $key_id, $key_alias ); };
+
+  die "ERROR: could not create key alias: $key_alias for key id: $key_id\n$EVAL_ERROR"
+    if !$alias_rsp || $EVAL_ERROR;
+
+  print {*STDOUT} JSON->new->pretty->encode(
+    [ create_key_response   => $rsp,
+      create_alias_response => $alias_rsp,
+    ]
+  );
+
+  return $SUCCESS;
+}
+
+########################################################################
+sub cmd_export_pem {
+########################################################################
+  my ($self) = @_;
+
+  my $kms = $self->_get_kms;
+
+  my $key_id = $self->get_key_id;
+
+  my $fh = choose {
+    return *STDOUT
+      if !$self->get_output_path;
+
+    open my $out_fh, '>', $self->get_output_path
+      or die sprintf "ERROR: could not open %s for writing\n%s", $self->get_output_path, $OS_ERROR;
+
+    return $out_fh
+  };
+
+  my $rsp = $self->_kms_get_public_key($key_id);
+
+  my $public_key = $rsp->{PublicKey};
+  my $der_data   = decode_base64($public_key);
+
+  print {$fh} "-----BEGIN PUBLIC KEY-----\n";
+  print {$fh} encode_base64($public_key);  # encode_base64 automatically wraps at 76 chars
+  print {$fh} "-----END PUBLIC KEY-----\n";
+
+  close $fh;
+
+  return $SUCCESS;
+}
+
+########################################################################
+sub cmd_describe_key {
+########################################################################
+  my ($self) = @_;
+
+  my ($key_id) = $self->get_args;
+  $key_id //= $self->get_key_id;
+
+  die "ERROR: usage: describe-key key-id\n"
+    if !$key_id;
+
+  my $rsp = $self->_kms_describe_key($key_id);
+
+  print {*STDOUT} JSON->new->pretty->encode($rsp);
+
+  return $SUCCESS;
+}
+
+########################################################################
+sub _validate_key_alias {
+########################################################################
+  my ($self) = @_;
+
+  my $kms = $self->_get_kms;
+
+  my $key_spec  = $self->get_key_spec  // $DEFAULT_KEY_SPEC;
+  my $key_usage = $self->get_key_usage // $DEFAULT_KEY_USAGE;
+  my $key_alias = $self->get_key_alias // $KEY_ALIAS;
+
+  my $parameter_name = $key_alias;
+  $parameter_name =~ s/^alias//xsm;
+
+  my $key_id = eval { $self->_ssm_get_parameter($parameter_name); };
+
+  die $EVAL_ERROR
+    if !$key_id && $EVAL_ERROR !~ /ParameterNotFound/xsm;
+
+  if ( !$key_id ) {
+    $self->get_logger->info( sprintf 'ssm:%s not found...creating new key', $parameter_name );
+    # we can't find it in SSM so we'll have to create new key
+    my $rsp = $kms->_kms_create_key(
+      key_spec    => $key_spec,
+      key_usage   => $key_usage,
+      description => 'Amazon::API provenance signing'
+    );
+
+    $key_id = $rsp->{KeyMetadata}{KeyId};
+
+    $self->_ssm_put_parameter( $parameter_name => $key_id );
+  }
+
+  eval {
+    $self->_kms_describe_key($key_alias);
+    return $TRUE;
+  } or do {
+    $self->_kms_create_alias( $key_id, $key_alias );
+  };
+
+  return $key_alias;
+}
+
+########################################################################
+sub _verify_provenance {
+########################################################################
+  my ( $self, $key_alias, $basename ) = @_;
+
+  return $self->_get_kms->Verify(
+    { KeyId            => $key_alias,
+      Message          => slurp("$basename.json"),
+      MessageType      => 'RAW',
+      SigningAlgorithm => $SIGNING_ALGORITHM,
+      Signature        => slurp("$basename.sig"),
+    }
+  );
+}
+
+########################################################################
+sub _write_provenance_record {
+########################################################################
+  my ( $self, $provenance_record, $basename ) = @_;
+
+  open my $fh, '>', "$basename.json"
+    or die "ERROR: could not open provenance.json for writing\n$OS_ERROR";
+
+  print {$fh} $provenance_record;
+
+  close $fh;
+
+  return;
+}
+
+########################################################################
+sub _sign_provenance_record {
+########################################################################
+  my ( $self, $provenance_record, $basename ) = @_;
+
+  my $sign_rsp = $self->_kms_sign( $KEY_ALIAS, $provenance_record );
+
+  $self->get_logger->debug( Dumper( [ sign_rsp => $sign_rsp ] ) );
+
+  open my $fh, '>', "$basename.sig"
+    or die "ERROR: could not open provenance.json.sig for writing\n$OS_ERROR";
+
+  binmode $fh;
+
+  print {$fh} $sign_rsp->{Signature};
+
+  close $fh;
+
+  return;
+}
+
+########################################################################
+sub _create_tarball_digest {
+########################################################################
+  my ( $self, $module_name ) = @_;
+
+  my $tarball = $module_name;
+  $tarball =~ s/::/-/xsmg;
+
+  ($tarball) = glob "$tarball-*.tar.gz";
+
+  die "ERROR: no tarball for $module_name\n"
+    if !$tarball;
+
+  require Archive::Tar;
+
+  my $tar = Archive::Tar->new;
+
+  $tar->read( $tarball, 1 );
+
+  my @sha256sums;
+
+  foreach my $f ( $tar->list_files() ) {
+    next if $f !~ /[.]pm$/xsm;
+
+    push @sha256sums, sha256_hex( $tar->get_content($f) );
+  }
+
+  return { tarball => $tarball, digest => sha256_hex("@sha256sums") };
+}
+
+########################################################################
+sub main {
+########################################################################
+  my @option_specs = qw(
+    help|h
+    input-path|i=s
+    key-alias|k=s
+    key-id|k=s
+    key-spec=s
+    key-usage=s
+    key-description=s
+    log-level|l=s
+    output-path|o=s
+    service|s=s
+    signature-file=s
+    signing-algorithm=s
+    profile=s
+  );
+
+  my %commands = (
+    'create-provenance' => \&cmd_create_provenance,
+    'export-pem'        => \&cmd_export_pem,
+    'describe-key'      => \&cmd_describe_key,
+    'create-key'        => \&cmd_create_key,
+    'sign'              => \&cmd_sign,
+    'verify'            => \&cmd_verify,
+  );
+
+  my $extra_options = [qw(kms ssm)];
+
+  my $default_options = {
+    key_id            => 'alias/provenance-signing',
+    key_alias         => 'alias/provenance-signing',
+    signing_algorithm => $SIGNING_ALGORITHM,
+  };
+
+  my $cli = __PACKAGE__->new(
+    commands        => \%commands,
+    option_specs    => \@option_specs,
+    default_options => $default_options,
+    extra_options   => $extra_options,
+  );
+
+  return $cli->run();
+}
+
+1;
+
+## no critic
+
+__END__
+
+=pod
+
+=head1 NAME
+
+amzn-api-provenance - create, sign, and verify provenance records for generated Amazon::API service distributions
+
+=head1 SYNOPSIS
+
+ # produce a signed record for a built service distribution
+ amzn-api-provenance --service sts create-provenance
+
+ # verify a record's signature via KMS
+ amzn-api-provenance --key-alias alias/provenance-signing \
+   --signature-file Amazon-API-STS-2011.06.15.sig \
+   file://Amazon-API-STS-2011.06.15.json verify
+
+ # bring-your-own-key utilities
+ amzn-api-provenance --key-alias alias/my-signing create-key
+ amzn-api-provenance --key-alias alias/my-signing --output-path msg.sig sign file://msg.txt
+ amzn-api-provenance --output-path provenance-pub.pem export-pem
+
+=head1 DESCRIPTION
+
+C<Amazon::API::Provenance> creates a signed B<provenance record> for a
+generated Amazon::API service distribution (for example
+C<Amazon::API::STS>). A provenance record answers a single question that a
+consumer downloading a prebuilt distribution cannot otherwise answer for
+themselves: I<are these bytes the faithful, untampered output of a known set
+of public inputs?>
+
+The record does not ask you to trust the build server. It records the public
+inputs the distribution was generated from -- the botocore commit and the
+SHA-256 of the exact C<service-2.json> and C<paginators-1.json> consumed,
+plus the C<Amazon::API> version and git SHA of the generator -- together with
+a digest of the built modules, and it is signed with an AWS KMS asymmetric
+key whose public half is published. A consumer can verify the signature
+offline with nothing but C<openssl> and the published public key, and an
+auditor can go further and reproduce the distribution from the recorded
+inputs to confirm the bytes independently (see L</VERIFYING A RECORD>).
+
+This module is normally run as the C<amzn-api-provenance> command during the
+distribution build (C<make cpan-dist>), not called as a library.
+
+=head2 This runs in your own AWS account
+
+Every command here operates against B<your> AWS account: C<create-key>,
+C<create-provenance>, C<sign>, and C<verify> call KMS (and SSM) with your
+credentials, create and use a KMS asymmetric key, and incur the associated
+AWS costs. Use C<--profile> to select a named AWS profile. The official
+published records were produced in the Amazon::API project's account --
+running these commands does not re-sign or alter those; it produces I<your
+own> records signed with I<your own> key.
+
+Most people never need to run this module at all. To consume a prebuilt
+distribution and check it, you only need C<openssl> and the published public
+key (see L</VERIFYING A RECORD>) -- no AWS account, no credentials, nothing
+from this module.
+
+Where it I<is> useful:
+
+=over 4
+
+=item * You run your own private DarkPAN and want to publish your own signed
+provenance records for the service distributions you build.
+
+=item * You want C<create-key>, C<sign>, C<verify>, and C<describe-key> as
+general KMS-backed signing utilities for messages you produce and check with
+your own key.
+
+=back
+
+If neither applies, you are a consumer, not a producer -- skip to
+L</VERIFYING A RECORD>.
+
+=head2 Managed key vs. your own key
+
+The commands operate in one of two modes:
+
+=over 4
+
+=item * B<Managed mode> (default). C<create-provenance> signs with the
+project's standard KMS key, referenced by the alias
+C<alias/provenance-signing>. The key id is looked up in AWS SSM Parameter
+Store and the key is created on demand the first time it is needed. This is
+the mode the official build pipeline uses; you do not manage keys directly.
+
+=item * B<Bring-your-own-key mode>. Name your own key with C<--key-alias>
+(or C<--key-id>) and manage it with C<create-key>, C<sign>, C<verify>, and
+C<describe-key>. The same key must be used for signing and verifying, or
+verification will fail.
+
+=back
+
+=head1 COMMANDS
+
+=over 4
+
+=item create-provenance
+
+ amzn-api-provenance --service <service> create-provenance
+
+Builds, signs, verifies, and writes the provenance record for the named
+service. Requires C<--service>. Reads C<botocore-version.json> and
+C<botocore-metadata.api> from C<--input-path> (default: the current
+directory) and locates the built C<< <dist>-<version>.tar.gz >> tarball in
+the current directory. On success it writes two files (see L</OUTPUT
+FILES>), re-verifies the signature it just produced via KMS, and prints the
+names of the files written. If verification fails the command exits non-zero
+and the record is not trusted.
+
+=item sign
+
+ amzn-api-provenance --key-alias <alias> [--output-path <file>] \
+   [--signing-algorithm <alg>] <message>
+
+Signs a message with the named KMS key and writes the raw signature to
+C<--output-path> (or standard output). The message is either a literal
+string argument or, more usefully, a C<file://> reference to a file whose
+contents are signed (KMS C<RAW> signing is limited to messages of 4096
+bytes). Use this in bring-your-own-key mode to sign an arbitrary message --
+including a provenance record you produced yourself -- with a key other than
+the managed default.
+
+=item verify
+
+ amzn-api-provenance --key-alias <alias> --signature-file <sig> \
+   [--signing-algorithm <alg>] <message>
+
+Verifies a message against a signature with the named KMS key. C<--signature-file>
+is required; the message is a literal string or a C<file://> reference (same
+4096-byte limit). Prints the KMS C<Verify> response; C<SignatureValid> in the
+output is the result. This is the KMS-side check; for offline verification a
+consumer uses C<openssl> instead (see L</VERIFYING A RECORD>).
+
+=item create-key
+
+ amzn-api-provenance [--key-spec <spec>] [--key-usage <usage>] \
+   [--key-description <text>] create-key <key-alias>
+
+Creates a KMS asymmetric signing key and its alias. The alias may be given
+as the positional argument or via C<--key-alias>; a bare name is prefixed
+with C<alias/> automatically (with a warning). Defaults are C<ECC_NIST_P256>
+/ C<SIGN_VERIFY>. Prints the KMS create-key and create-alias responses as
+JSON.
+
+=item describe-key
+
+ amzn-api-provenance describe-key <key-id-or-alias>
+
+Prints the KMS metadata for the given key id or alias as JSON. Useful for
+confirming a key's spec, usage, and state before signing.
+
+=item export-pem
+
+ amzn-api-provenance [--output-path <file>] export-pem
+
+Writes the public half of the signing key in PEM form to C<--output-path>
+(or standard output). This is the key a consumer verifies against; the
+authoritative published copy lives in the C<Amazon::API> GitHub repository
+(see L</THE PUBLISHED PUBLIC KEY>).
+
+=back
+
+=head1 OPTIONS
+
+=over 4
+
+=item --service, -s <name>
+
+Botocore service to produce a record for (e.g. C<sts>, C<sqs>). Required by
+C<create-provenance>.
+
+=item --input-path, -i <dir>
+
+Directory containing the build inputs C<botocore-version.json> and
+C<botocore-metadata.api>. Defaults to the current working directory.
+
+=item --output-path, -o <file>
+
+Destination for C<sign> and C<export-pem>. Defaults to standard output.
+
+=item --key-alias, -k <alias>
+
+KMS key alias to sign or verify with. Defaults to C<alias/provenance-signing>.
+
+=item --key-id <id>
+
+KMS key id (or alias) to sign or verify with, as an alternative to
+C<--key-alias>.
+
+=item --key-spec <spec>
+
+KMS key spec used by C<create-key>. Default C<ECC_NIST_P256>.
+
+=item --key-usage <usage>
+
+KMS key usage used by C<create-key>. Default C<SIGN_VERIFY>.
+
+=item --key-description <text>
+
+Description recorded on a key created by C<create-key>. Defaults to the alias.
+
+=item --signature-file <file>
+
+Signature to check. Required by C<verify>.
+
+=item --signing-algorithm <alg>
+
+KMS signing algorithm for C<sign>/C<verify>. Default C<ECDSA_SHA_256>
+(matching the default C<ECC_NIST_P256> key).
+
+=item --profile <name>
+
+Named AWS profile to use for KMS/SSM calls.
+
+=item --log-level, -l <level>
+
+Log4perl level (default C<info>).
+
+=back
+
+=head1 THE PROVENANCE RECORD
+
+The record is a canonical (sorted-key) JSON object. Canonical encoding
+matters: the signature is over the exact bytes, so the same record always
+serializes identically and re-verifies. The fields are:
+
+=over 4
+
+=item provenance_version
+
+Schema version of the record itself (currently C<1>).
+
+=item hash_algo
+
+The digest algorithm used throughout the record (C<sha256>).
+
+=item botocore
+
+An object identifying the botocore source the service was generated from --
+its C<commit> and C<version>. This, with the two file digests below, lets a
+verifier fetch the exact upstream inputs.
+
+=item service-2.json
+
+SHA-256 of the exact botocore C<service-2.json> model consumed. Because AWS
+revises a model I<in place> without changing its api-version, this digest --
+not the version string -- is what distinguishes one revision of a service
+model from another.
+
+=item paginators-1.json
+
+SHA-256 of the C<paginators-1.json> consumed (absent if the service has no
+paginators file). Both inputs are recorded because both feed the generated
+output.
+
+=item Amazon::API::BuildInfo::GIT_SHA
+
+The git commit of the C<Amazon::API> generator that produced the
+distribution. A version number alone is insufficient -- generation logic can
+change without a version bump -- so the SHA pins the generator for
+independent reproduction.
+
+=item Amazon::API::BuildInfo::VERSION
+
+The C<Amazon::API> version that produced the distribution.
+
+=item module_name
+
+The generated module (e.g. C<Amazon::API::STS>).
+
+=item service
+
+The service and its api-version date (e.g. C<sts/2011-06-15>).
+
+=item tarball
+
+The distribution filename (e.g. C<Amazon-API-STS-2011.06.15.tar.gz>), so the
+record is self-identifying.
+
+=item digest
+
+The output digest that binds the built code: the SHA-256 of the
+concatenated, per-file SHA-256 hashes of the distribution's C<.pm> members,
+taken in sorted order. B<Scope:> this digest covers the generated Perl
+modules -- the code a consumer runs. It does not directly cover the C<.api>
+shape blob, POD, or C<MANIFEST>. Those derived artifacts are covered
+I<indirectly>: they are a deterministic function of the same botocore inputs
+already pinned above, so tampering with them would be caught by reproducing
+the build (L</Tier 2: reproduce and compare>). The C<.pm> digest binds the
+code directly; the recorded botocore-input digests plus reproducibility bind
+everything derived from those inputs.
+
+=back
+
+=head1 OUTPUT FILES
+
+C<create-provenance> writes two files, named after the distribution tarball
+with C<.tar.gz> stripped:
+
+ <basename>.json       # the canonical provenance record
+ <basename>.sig        # the detached KMS signature (raw DER)
+
+For C<Amazon-API-STS-2011.06.15.tar.gz> these are
+C<Amazon-API-STS-2011.06.15.json> and C<Amazon-API-STS-2011.06.15.sig>. The
+name is derived mechanically from the tarball name so that, given a
+distribution, a consumer can compute the names of its record and signature
+without a lookup.
+
+=head1 DISTRIBUTION ON THE DarkPAN
+
+On the official Amazon::API DarkPAN (L<https://cpan.openbedrock.net/orepan2>)
+the record and signature for each published distribution live under a
+C</signature> directory, named as above. Given a tarball
+C<Amazon-API-STS-2011.06.15.tar.gz>, its record and signature are:
+
+ https://cpan.openbedrock.net/orepan2/signature/Amazon-API-STS-2011.06.15.json
+ https://cpan.openbedrock.net/orepan2/signature/Amazon-API-STS-2011.06.15.sig
+
+=head1 THE PUBLISHED PUBLIC KEY
+
+The authoritative public key is published in the C<Amazon::API> B<GitHub
+repository> (C<provenance-pub.pem> at the repository root), deliberately I<not>
+alongside the artifacts on the DarkPAN. Keeping the key in a separate trust
+domain from the artifacts is the point: a verifier who obtains the key from
+GitHub and checks DarkPAN artifacts against it is not relying on the DarkPAN
+to vouch for itself. A compromise of the DarkPAN alone cannot forge a record
+that verifies against the repository-hosted key.
+
+=head1 VERIFYING A RECORD
+
+Two levels of verification are available, requiring progressively less trust
+in the publisher's infrastructure.
+
+=head2 Tier 1: verify the signature
+
+Fetch the record and signature for the distribution, obtain the public key
+from the GitHub repository (not the DarkPAN), and verify with C<openssl> --
+no AWS access and no tooling from this project required:
+
+ openssl dgst -sha256 -verify provenance-pub.pem \
+   -signature Amazon-API-STS-2011.06.15.sig \
+   Amazon-API-STS-2011.06.15.json
+
+C<Verified OK> confirms the record was signed by the holder of the private
+key and has not been altered. This establishes that the recorded inputs and
+digests are authentic; it does not by itself prove the tarball matches them.
+
+(The C<verify> command performs the equivalent check server-side via KMS,
+which requires AWS credentials; the C<openssl> form above is the offline
+path a consumer uses.)
+
+=head2 Tier 2: reproduce and compare
+
+To confirm the distribution's bytes independently -- trusting none of the
+publisher's infrastructure -- reproduce the build from the recorded inputs
+and compare. This requires the C<Amazon::API> project checked out, not the
+installed module (only the cloned project can build a distribution):
+
+=over 4
+
+=item 1.
+
+Check out C<Amazon::API> at the record's C<Amazon::API::BuildInfo::GIT_SHA>,
+and botocore at the record's C<botocore.commit>.
+
+=item 2.
+
+Confirm the botocore inputs: the SHA-256 of C<service-2.json> and
+C<paginators-1.json> for the service must match the C<service-2.json> and
+C<paginators-1.json> fields in the record.
+
+=item 3.
+
+Rebuild the distribution (C<make cpan-dist SERVICE=sts>) and recompute the
+C<.pm> digest as described in L</THE PROVENANCE RECORD>; it must equal the
+record's C<digest>.
+
+=back
+
+Because the build is deterministic, a matching digest proves the published
+tarball is the faithful output of the recorded, publicly verifiable inputs.
+
+=head1 SEE ALSO
+
+L<Amazon::API>, L<Amazon::API::AutoBuilder>, L<https://cpan.openbedrock.net/orepan2>
+
+=head1 AUTHOR
+
+Rob Lauer - <rlauer@treasurersbriefcase.com>
+
+=head1 LICENSE
+
+This module is free software. It may be used, redistributed and/or modified
+under the same terms as Perl itself.
+
+=cut

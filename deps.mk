@@ -1,5 +1,5 @@
 # ./bin/build-boto-services.pl.in
-./bin/build-boto-services.pl.in: \
+./bin/build-boto-services.pl: \
     ./lib/Amazon/API/Botocore.pm
 
 # ./lib/Amazon/API.pm.in
@@ -18,6 +18,7 @@
 ./lib/Amazon/API/Botocore.pm: \
     ./lib/Amazon/API/Botocore/Pod.pm \
     ./lib/Amazon/API/Botocore/Shape/Utils.pm \
+    ./lib/Amazon/API/BuildInfo.pm \
     ./lib/Amazon/API/Constants.pm \
     ./lib/Amazon/API/Pod/Parser.pm \
     ./lib/Amazon/API/Template.pm
@@ -40,6 +41,7 @@
 
 # ./lib/Amazon/API/Botocore/Shape/Utils.pm.in
 ./lib/Amazon/API/Botocore/Shape/Utils.pm: \
+    ./lib/Amazon/API/BuildInfo.pm \
     ./lib/Amazon/API/Constants.pm
 
 # ./lib/Amazon/API/HTTP/UserAgent.pm.in
@@ -53,6 +55,14 @@
 # ./lib/Amazon/API/Pod/Parser.pm.in
 ./lib/Amazon/API/Pod/Parser.pm: \
     ./lib/Amazon/API/Pod/Simple/Text.pm
+
+# ./lib/Amazon/API/Provenance.pm.in
+./lib/Amazon/API/Provenance.pm: \
+    ./lib/Amazon/API.pm \
+    ./lib/Amazon/API/Botocore.pm \
+    ./lib/Amazon/API/BuildInfo.pm \
+    ./lib/Amazon/API/Provenance/Role/KMS.pm \
+    ./lib/Amazon/API/Provenance/Role/SSM.pm
 
 # ./lib/Amazon/API/Template.pm.in
 ./lib/Amazon/API/Template.pm: \

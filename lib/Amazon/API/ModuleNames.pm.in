@@ -94,7 +94,7 @@ sub cmd_create_module_names {
   open my $fh, '>', $module_names_file
     or die sprintf 'ERROR: could not open %s for writing: %s', $module_names_file, $OS_ERROR;
 
-  print {$fh} JSON->new->pretty->encode($canonical_names);
+  print {$fh} JSON->new->pretty->canonical->encode($canonical_names);
 
   close $fh;
 

@@ -75,7 +75,9 @@ Amazon::API::Botocore::Shape::Utils::register_service_shapes( 'TestCF', \%shapes
 ## Minimal fixture: a bare blessed Amazon::API-shaped hashref with just
 ## the accessors init_botocore_request needs, bypassing new() (which
 ## pulls in credentials/region/network setup unrelated to this test).
-package Amazon::API::TestCF {
+{
+
+  package Amazon::API::TestCF;
   our @ISA = ('Amazon::API');
 }
 

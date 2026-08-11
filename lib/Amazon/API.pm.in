@@ -685,8 +685,8 @@ sub decode_response {
   $response = $response || $self->get_response;
 
   # could be Furl or HTTP?
-  if ( !ref $response && $response->can('content') ) {
-    croak q{can't decode response - not a response object: } . ref $response;
+  if ( !blessed $response || !$response->can('content') ) {
+    croak q{can't decode response - not a response object: } . ( ref $response || 'non-reference' );
   }
 
   my $content = $response->content;

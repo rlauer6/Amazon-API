@@ -78,7 +78,9 @@ my %shapes = (
 
 Amazon::API::Botocore::Shape::Utils::register_service_shapes( 'TestCF', \%shapes );
 
-package Amazon::API::TestCF {
+{
+
+  package Amazon::API::TestCF;
   our @ISA = ('Amazon::API');
 }
 
@@ -86,11 +88,11 @@ my $api = bless {
   botocore_metadata   => { protocol => 'rest-xml', },
   botocore_operations => {
     UpdateDistribution => {
-      input => { shape => 'UpdateDistributionRequest', payload => 'DistributionConfig', },
-      http  => { method => 'PUT', requestUri => '/2020-05-31/distribution/{Id}/config', },
+      input => { shape  => 'UpdateDistributionRequest', payload    => 'DistributionConfig', },
+      http  => { method => 'PUT',                       requestUri => '/2020-05-31/distribution/{Id}/config', },
     },
     GetDistributionConfig => {
-      output => { shape => 'GetDistributionConfigResult', },
+      output => { shape  => 'GetDistributionConfigResult', },
       http   => { method => 'GET', requestUri => '/2020-05-31/distribution/{Id}/config', },
     },
   },
@@ -129,7 +131,7 @@ ok( !exists $parameters->{Id}, 'uri member (Id) extracted, not left in the body'
 ## ...and stashed for submit() as its wire header name
 my $req_headers = $api->get_botocore_request_headers;
 
-is( ref $req_headers, 'HASH', 'request header stash is a hashref' );
+is( ref $req_headers,           'HASH',           'request header stash is a hashref' );
 is( $req_headers->{'If-Match'}, 'E2QWRUHAPOMQZL', 'IfMatch stashed under its wire name If-Match' );
 ok( !exists $req_headers->{ETag}, 'no stray headers stashed' );
 
@@ -138,7 +140,7 @@ my $content = $api->serialize_content($parameters);
 
 ok( $content, 'serialize_content produced non-empty content' );
 like( $content, qr/<DistributionConfig/xsm, 'body root is the payload member' );
-like( $content, qr/CallerReference/xsm,      'body carries payload content' );
+like( $content, qr/CallerReference/xsm,     'body carries payload content' );
 unlike( $content, qr/<IfMatch/xsm, 'body does NOT contain the header member (no second root)' );
 unlike( $content, qr/<Id\b/xsm,    'body does NOT contain the uri member' );
 
@@ -152,7 +154,7 @@ my $p2 = $api->init_botocore_request(
   }
 );
 
-ok( !exists $p2->{IfMatch}, 'undef header member removed from body (no phantom root)' );
+ok( !exists $p2->{IfMatch},                                   'undef header member removed from body (no phantom root)' );
 ok( !exists $api->get_botocore_request_headers->{'If-Match'}, 'undef header value not emitted as a header' );
 
 ## ======================================================================
@@ -163,8 +165,8 @@ ok( !exists $api->get_botocore_request_headers->{'If-Match'}, 'undef header valu
 ## isolates the header-lift decode_response now performs after serialize.
 package StubSerializer {
   sub new          { return bless {}, shift }
-  sub set_protocol { return }
-  sub set_logger   { return }
+  sub set_protocol {return}
+  sub set_logger   {return}
   sub serialize    { return { DistributionConfig => { CallerReference => 'foo' } } }
 }
 
@@ -178,7 +180,7 @@ my $http_response = Amazon::API::HTTP::Response->new(
     success => 1,
     headers => {
       'content-type' => 'text/xml',
-      'etag'         => 'E2QWRUHAPOMQZL',    # HTTP::Tiny lowercases header keys
+      'etag'         => 'E2QWRUHAPOMQZL',  # HTTP::Tiny lowercases header keys
     },
   }
 );
@@ -188,7 +190,7 @@ my $result = eval { $api->decode_response($http_response) };
 ok( !$EVAL_ERROR, 'decode_response did not die' )
   or diag("error: $EVAL_ERROR");
 
-is( ref $result, 'HASH', 'decode_response returned a hashref' );
+is( ref $result,     'HASH',           'decode_response returned a hashref' );
 is( $result->{ETag}, 'E2QWRUHAPOMQZL', 'header output member (ETag) lifted from response headers into the result' )
   or diag( explain($result) );
 ok( exists $result->{DistributionConfig}, 'body output member preserved alongside the lifted header' );

@@ -262,7 +262,7 @@ sub _init_value {
   my $value = $self->get__value;
 
   return
-    if !$value;
+    if !defined $value;
 
   # timestamp members accept an epoch or any object that can ->epoch
   # (Time::Piece, DateTime - duck-typed, never loaded here). Coerce to epoch

@@ -43,9 +43,7 @@ my %shapes = (
   Change => {
     type     => 'structure',
     required => [qw(Action)],
-    members  => {
-      Action => { shape => 'String' },
-    },
+    members  => { Action => { shape => 'String' }, },
   },
 
   Changes => {
@@ -75,7 +73,9 @@ my %shapes = (
 
 Amazon::API::Botocore::Shape::Utils::register_service_shapes( 'TestR53', \%shapes );
 
-package Amazon::API::TestR53 {
+{
+
+  package Amazon::API::TestR53;
   our @ISA = ('Amazon::API');
 }
 
@@ -121,19 +121,16 @@ ok( !$EVAL_ERROR, 'serialize_content did not die (no multi-root guard croak)' )
 ok( $content, 'serialize_content produced non-empty content' );
 
 ## The fix: single operation-wrapper root, namespace as an attribute ON it.
-like( $content, qr/<ChangeResourceRecordSetsRequest\b/,
-  'body root is the operation-wrapper element' );
+like( $content, qr/<ChangeResourceRecordSetsRequest\b/, 'body root is the operation-wrapper element' );
 
-like( $content, qr/<ChangeResourceRecordSetsRequest[^>]*\bxmlns="\Q$NS\E"/,
-  'xmlns is an attribute on the root element' );
+like( $content, qr/<ChangeResourceRecordSetsRequest[^>]*\bxmlns="\Q$NS\E"/, 'xmlns is an attribute on the root element' );
 
-like( $content, qr{<ChangeBatch>.*</ChangeBatch>}s,
-  'ChangeBatch is nested inside the root' );
+like( $content, qr{<ChangeBatch>.*</ChangeBatch>}s, 'ChangeBatch is nested inside the root' );
 
 ## The regression signatures: no stray <_attr> sibling, and the namespace
 ## must NOT have leaked out as its own element.
 unlike( $content, qr/<_attr\b/, 'no stray <_attr> element in the body' );
-unlike( $content, qr{<xmlns>}, 'xmlns did not leak out as an element' );
+unlike( $content, qr{<xmlns>},  'xmlns did not leak out as an element' );
 
 ## uri-located member stays in the path, not the body.
 unlike( $content, qr/<Id>/, 'uri-located HostedZoneId is not in the body' );

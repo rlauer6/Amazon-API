@@ -1,3 +1,66 @@
+Tue Aug 11 11:52:31 2026  Rob Lauer  <rclauer@gmail.com>
+
+	[2.5.0]:
+	* release-notes: updated
+	* release-notes/release-notes-2.5.0.md: new
+	* VERSION: modified
+	* .gitignore
+	- + botocore-vresion, json, bin/amzn-api-provenance, provenance*, local/**
+	* .includes/local.mk: added by CPAN::Maker::Bootstrapper
+	* .includes/git.mk: updated by CPAN::Maker::Bootstrapper
+	* .includes/perl.mk: likewise
+	* .includes/update.mk: likewise
+	* requires: likewise
+	* cpanfile: likewise
+	* deps.mk: likewise
+	* Makefile: likewise
+	* bin/amazon-api.in: refactored by make modulino
+	* lib/Amazon/API.pm.in
+	(decode_response)
+	- guard agains non-blessed response objects
+	* lib/Amazon/API/Botocore.pm.in
+	(render_stub)
+	- add botocore_version, botocore_commit from botocore-version.json for rendered stub
+	- add git_sha to rendered stub
+	- add service_2_digest, paginators_1_digest to rendered stop
+	(get_service_descriptions)
+	- calculate digests for service-2.json, paginators-1.json
+	(fetch_boto_services)
+	- add service-2.json digest to %BOTO_SERVICES
+	- add paginators-1.json digest to %BOTO_SERVICES
+	(create_stub)
+	- store services.api in deterministic order ($Storable::canonical = 1)
+	- store service-2.json digest
+	- stgore paginators-1.json digest
+	(module_name): refactord to use _module_name
+	(_module_name): new
+	(DATA)
+	- remove timestamps
+	- add new template vars (git_sha, paginator_1_digest, service_2_digest
+	* lib/Amazon/API/Botocore/Shape.pm.in
+	(_init_value)
+	- return if !defined to avoid return when value is falsy
+	* lib/Amazon/API/Botocore/Shape/Utils.pm.in
+	(create_shape)
+	- add git_hash
+	- remove timestamp add git_hash
+	* lib/Amazon/API/ModuleNames.pm.in
+	(cmd_create_module_names)
+	- canonical ordering of module_names.json to avoid fake diffs
+	* project.mk
+	- updated recipes to avoid rebuilding unnecessarily
+	- cleanup provenance files
+	* t/04-rest-xml-payload.t: fix package declaration
+	* t/05-rest-xml-nonpayload.t: likewise
+	* t/08-rest-xml-header.t: likewise
+	* t/09-blob-and-statuscode.t: likewise
+	* bin/amzn-api-provenance.in: new
+	* lib/Amazon/API/BuildInfo.pm.in: new
+	* lib/Amazon/API/Provenance.pm.in: new
+	* lib/Amazon/API/Provenance/Role/KMS.pm.in: new
+	* lib/Amazon/API/Provenance/Role/SSM.pm.in: new
+	* requires.skip: new
+
 Sat Aug  1 13:57:18 2026  Rob Lauer  <rclauer@gmail.com>
 
 	[2.4.6]:

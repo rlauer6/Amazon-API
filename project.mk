@@ -8,9 +8,13 @@ BOTOCORE_REPO  = https://github.com/boto/botocore.git
 
 BUILD_BOTO_SERVICES = $(BUILD_DIR)/bin/build-boto-services
 CREATE_MODULE_NAMES = $(BUILD_DIR)/bin/amzn-api-module-names
+AMAZON_API          = $(BUILD_DIR)/bin/amzn-api
 
-CPAN_DIST_MAKER=cpan-maker
 DEPS += services.api botocore-metadata.api
+
+$(AMAZON_API):
+	cd $(BUILD_DIR); \
+	$(MAKE)
 
 $(BUILD_BOTO_SERVICES):
 	cd $(BUILD_DIR); \
@@ -22,27 +26,44 @@ $(CREATE_MODULE_NAMES):
 
 PERL5LIBDIR = $(BUILD_DIR)/lib
 
-$(BOTOCORE_STATE): | $(BOTOCORE_PATH)
-	remote_hash=$$(git ls-remote $(BOTOCORE_REPO) HEAD | awk '{print $$1}'); \
-	if [ ! -f $(BOTOCORE_STATE) ] || [ "$$remote_hash" != "$$(cat $(BOTOCORE_STATE))" ]; then \
-	  echo "$$remote_hash" > $(BOTOCORE_STATE); \
-	  cd $(BOTOCORE_PATH) && git pull; \
-	fi
+.PHONY: botocore-pull
+botocore-pull: | $(BOTOCORE_PATH)                # always checks remote, pulls if newer
+	$(NO_ECHO)remote=$$(git ls-remote --heads $(BOTOCORE_REPO) master | awk '{print $$1}'); \
+	local=$$(cd $(BOTOCORE_PATH) && git rev-parse HEAD); \
+	[[ "$$remote" != "$$local" ]] && { echo "Pulling Botocore"; (cd $(BOTOCORE_PATH) && git pull); } || true
+
+$(BOTOCORE_STATE): | botocore-pull               # records HEAD after any pull, write-if-changed
+	$(NO_ECHO)local=$$(cd $(BOTOCORE_PATH) && git rev-parse HEAD); \
+	if [[ ! -e $@ ]] || [[ "$$local" != "$$(cat $@)" ]]; then echo "$$local" > $@; fi
+
+CLEANFILES += $(BUILD_DIR)/botocore-version.json
+
+.PHONY: botocore-version
+botocore-version: $(BUILD_DIR)/botocore-version.json
+
+$(BUILD_DIR)/botocore-version.json: $(BOTOCORE_STATE) | $(BOTOCORE_PATH)
+	$(NO_ECHO)cd $(BOTOCORE_PATH); \
+	version=$$(git tag --list | tail -1); \
+	commit=$$(cat $<); \
+	echo '{ "version" : "'$$version'", "commit": "'$$commit'" }' >$@
 
 # The directory target handles the initial clone
 $(BOTOCORE_PATH):
-	mkdir -p $@; \
-	git clone --depth=1 $(BOTOCORE_REPO) $@
+	$(NO_ECHO)mkdir -p $@; \
+	git clone --branch master --depth=1 $(BOTOCORE_REPO) $@
 	cd $@
 
-botocore-metadata.api: module_names.json $(BOTOCORE_STATE) $(CREATE_MODULE_NAMES) | $(BOTOCORE_PATH)
-	PERL5LIB=$(PERL5LIB):$(PERL5LIBDIR) $(CREATE_MODULE_NAMES) -b $(BOTOCORE_PATH) create
+botocore-metadata.api module_names.json &: \
+    $(BOTOCORE_STATE) \
+    $(CREATE_MODULE_NAMES) | $(BOTOCORE_PATH)
+	PERL5LIB=$(PERL5LIBDIR):$(BUILD_DIR)/local/lib/perl5 $(CREATE_MODULE_NAMES) -b $(BOTOCORE_PATH) create
 
 # services.api only runs if missing or if the botocore dir is newer
 services.api: \
     $(BOTOCORE_STATE) \
+    $(BUILD_DIR)/botocore-version.json \
     $(BUILD_BOTO_SERVICES) | $(BOTOCORE_PATH)
-	PERL5LIB=$(PERL5LIB):$(PERL5LIBDIR) $(BUILD_BOTO_SERVICES) -p $(BOTOCORE_PATH) -o $@
+	PERL5LIB=$(PERL5LIBDIR):$(BUILD_DIR)/local/lib/perl5 $(BUILD_BOTO_SERVICES) -p $(BOTOCORE_PATH) -o $@
 
 # update-botocore now ensures the directory exists first
 .PHONY: update-botocore
@@ -64,7 +85,7 @@ cpan-dist: workdir/buildspec-api.yml workdir/requires | workdir ## create a CPAN
 	test -n "$(NOVERSION)" && NOVERSION="-n"; \
 	REAL_PATH=$$(realpath .); \
 	PROJECT_ROOT="--project-root $$REAL_PATH"; \
-	$(CPAN_DIST_MAKER) $$PROJECT_ROOT \
+	$(CPAN_MAKER) $$PROJECT_ROOT \
 	  $$REQUIRES \
 	  $$DRYRUN \
 	  $$NOVERSION \
@@ -73,13 +94,17 @@ cpan-dist: workdir/buildspec-api.yml workdir/requires | workdir ## create a CPAN
 	cp $$(ls -1 *.tar.gz) ../
 	rm -rf workdir
 
-workdir/service.api: $(BOTOCORE_PATH) botocore-metadata.api | workdir
+workdir/service.api: \
+    $(BOTOCORE_PATH) \
+    $(AMAZON_API) \
+    botocore-metadata.api \
+    botocore-version.json | workdir
 	$(NO_ECHO)if [[ -z "$(SERVICE)" ]]; then \
 	  echo >&2 "ERROR: no SERVICE specified. usage SERVICE=service\n"; \
 	  exit 1; \
 	fi; \
 	service="$(SERVICE)"; \
-	module_name="$$(amazon-api module-name $$service)"; \
+	module_name="$$($(AMAZON_API) module-name $$service)"; \
 	echo $$service > workdir/service; \
 	echo $$module_name > workdir/module; \
 	service_found="$$(find $(BOTOCORE_PATH)/botocore/data -mindepth 1 -maxdepth 1 -type d -name $$service 2>/dev/null)"; \
@@ -87,6 +112,7 @@ workdir/service.api: $(BOTOCORE_PATH) botocore-metadata.api | workdir
 	  echo >&2 "ERROR: no such service $$service"; \
 	  exit 1; \
 	fi; \
+	cp botocore-version.json workdir/; \
 	cd workdir; \
 	mkdir -p lib; \
 	if test -n "$$TIDY"; then \
@@ -94,18 +120,21 @@ workdir/service.api: $(BOTOCORE_PATH) botocore-metadata.api | workdir
 	fi; \
 	for a in stub shapes; do \
 	  echo "creating...$$a"; \
-	  amazon-api $$TIDY -b $(BOTOCORE_PATH) --pod -s "$$service" -m "$$module_name" -o lib "create-$$a"; \
+	  $(AMAZON_API) $$TIDY -b $(BOTOCORE_PATH) --pod \
+	     -s "$$service" -m "$$module_name" -o lib "create-$$a"; \
 	done; \
 	module_path="$$(echo lib/Amazon/API/$${module_name}.pm | sed -e 's/::/\//g;')"; \
-	service_date=$$(build-boto-services -p $(BOTOCORE_PATH) list $$service | jq -r .date); \
+	service_date=$$($(BUILD_BOTO_SERVICES) -p $(BOTOCORE_PATH) list $$service | jq -r .date); \
         service_date="$${service_date//-/.}"; \
-	sed -e 's/[@]SERVICE_VERSION[@]/'$$service_date'/' $$module_path > $${module_path}.tmp; \
+	sed -e 's/[@]service_version[@]/'$$service_date'/' $$module_path > $${module_path}.tmp; \
 	mv $${module_path}.tmp $${module_path}; \
-	for a in $$(find lib -name '*.pm'); do \
-	  temp="$${a%.pm}"; \
-	  podextract -i $$a -o $$a.tmp -p "$${temp}.pod"; \
-	  mv $$a.tmp $$a; \
-	done; \
+	if [[ -n $(PODEXTRACT) ]]; then \
+	  for a in $$(find lib -name '*.pm'); do \
+	    temp="$${a%.pm}"; \
+	    $(PODEXTRACT) -i $$a -o $$a.tmp -p "$${temp}.pod"; \
+	    mv $$a.tmp $$a; \
+	  done; \
+	fi; \
 	cp "lib/$${module_name}.api" $$(basename $@)
 
 BOTOCORE_BASE := $(BOTOCORE_PATH)/botocore/data
@@ -136,8 +165,6 @@ query.services:
 workdir:
 	mkdir -p workdir
 
-clean-local::
-	rm -rf workdir
 
 define script
 require Text::ASCIITable;
@@ -213,3 +240,12 @@ workdir/buildspec-api.yml: buildspec-api.yml.in workdir/service.api | workdir
 .PHONY: install
 install: $(TARBALL)
 	cpanm -n -v -l $(HOME) $<
+
+# TODO: relocation module_names.json to share/
+clean-local::
+	for a in $$(ls -1 *.json); do \
+	  if ! [[ "$$a" = "module_names.json" ]]; then \
+	    rm -f $$a; \
+	  fi; \
+	done; \
+	rm -rf workdir *.sig

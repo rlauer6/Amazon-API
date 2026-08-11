@@ -32,22 +32,26 @@ use_ok('Amazon::API::Botocore::Shape::Utils');
 ## ======================================================================
 ## location: statusCode  (receive, via real decode_response)
 ## ======================================================================
-package Amazon::API::TestSC { our @ISA = ('Amazon::API'); }
+{
+
+  package Amazon::API::TestSC;
+  our @ISA = ('Amazon::API');
+}
 
 ## stub serializer: body shaping is orthogonal + covered elsewhere; this
 ## isolates decode_response's status/header lift.
 package StubSerializer {
   sub new          { return bless {}, shift }
-  sub set_protocol { return }
-  sub set_logger   { return }
-  sub serialize    { return { Reason => 'ok' } }    # a body member
+  sub set_protocol {return}
+  sub set_logger   {return}
+  sub serialize    { return { Reason => 'ok' } }  # a body member
 }
 
 my $sc = bless {
   botocore_metadata   => { protocol => 'rest-json' },
   botocore_operations => {
     PublishBatch => {
-      output => { shape => 'PublishBatchResult' },
+      output => { shape  => 'PublishBatchResult' },
       http   => { method => 'POST', requestUri => '/batch' },
     },
   },
@@ -69,8 +73,13 @@ my $sc = bless {
 $sc->set_action('PublishBatch');
 
 my $sc_rsp = Amazon::API::HTTP::Response->new(
-  { content => '{"Reason":"ok"}', status => 204, reason => 'No Content', success => 1,
-    headers => { 'content-type' => 'application/json' } } );
+  { content => '{"Reason":"ok"}',
+    status  => 204,
+    reason  => 'No Content',
+    success => 1,
+    headers => { 'content-type' => 'application/json' }
+  }
+);
 
 my $sc_result = eval { $sc->decode_response($sc_rsp) };
 ok( !$EVAL_ERROR, 'decode_response (statusCode) did not die' ) or diag($EVAL_ERROR);
@@ -82,18 +91,13 @@ ok( exists $sc_result->{Reason}, 'body member preserved alongside the lifted sta
 ## ======================================================================
 my $plain = 'binary\0payload bytes';
 
-my $value_blob = Amazon::API::Botocore::Shape->new(
-  { type => 'blob', _value => $plain, service => 'test' } );
-is( $value_blob->finalize('json'), encode_base64( $plain, q{} ),
-  'value blob is base64-encoded on send (single line)' );
+my $value_blob = Amazon::API::Botocore::Shape->new( { type => 'blob', _value => $plain, service => 'test' } );
+is( $value_blob->finalize('json'), encode_base64( $plain, q{} ), 'value blob is base64-encoded on send (single line)' );
 
-my $stream_blob = Amazon::API::Botocore::Shape->new(
-  { type => 'blob', streaming => 1, _value => $plain, service => 'test' } );
-is( $stream_blob->finalize('json'), $plain,
-  'streaming blob passes through raw on send (NOT base64)' );
+my $stream_blob = Amazon::API::Botocore::Shape->new( { type => 'blob', streaming => 1, _value => $plain, service => 'test' } );
+is( $stream_blob->finalize('json'), $plain, 'streaming blob passes through raw on send (NOT base64)' );
 
-my $undef_blob = Amazon::API::Botocore::Shape->new(
-  { type => 'blob', _value => undef, service => 'test' } );
+my $undef_blob = Amazon::API::Botocore::Shape->new( { type => 'blob', _value => undef, service => 'test' } );
 is( $undef_blob->finalize('json'), undef, 'undef blob stays undef (no encode)' );
 
 ## same encode works regardless of protocol (blobs are base64 on all wires)

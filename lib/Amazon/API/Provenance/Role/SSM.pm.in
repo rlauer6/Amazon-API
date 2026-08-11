@@ -1,0 +1,57 @@
+package Amazon::API::Provenance::Role::SSM;
+# lightweight SSM client
+
+use strict;
+use warnings;
+
+use CLI::Simple::Constants qw(:booleans);
+use Data::Dumper;
+use English qw(-no_match_vars);
+
+use Role::Tiny;
+
+########################################################################
+sub _get_ssm {
+########################################################################
+  my ($self) = @_;
+
+  require Amazon::API::SSM;
+
+  return $self->get_ssm
+    if $self->get_ssm;
+
+  my $ssm = Amazon::API::SSM->new(
+    log_level => $self->get_log_level,
+    profile   => $self->get_profile // $ENV{AWS_PROFILE}
+  );
+
+  $self->set_ssm($ssm);
+
+  return $ssm;
+}
+
+########################################################################
+sub _ssm_put_parameter {
+########################################################################
+  my ( $self, $name, $value, $type ) = @_;
+
+  $type //= 'String';
+
+  return $self->get_ssm->PutParameter( { Name => $name, Type => $type, Value => $value } );
+}
+
+########################################################################
+sub _ssm_get_parameter {
+########################################################################
+  my ( $self, $name, $with_decryption ) = @_;
+
+  $with_decryption //= $FALSE;
+
+  my $ssm = $self->_get_ssm;
+
+  my $rsp = $ssm->GetParameter( { Name => $name, WithDecryption => \$with_decryption } );
+
+  return $rsp->{Parameter}{Value};
+}
+
+1;

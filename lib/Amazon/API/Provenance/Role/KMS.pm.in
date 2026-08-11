@@ -1,0 +1,97 @@
+package Amazon::API::Provenance::Role::KMS;
+# lightweight KMS client
+
+use strict;
+use warnings;
+
+use Data::Dumper;
+use English qw(-no_match_vars);
+use MIME::Base64 qw(decode_base64 encode_base64);
+
+use Readonly;
+Readonly::Scalar our $SIGNING_ALGORITHM => 'ECDSA_SHA_256';
+
+use Role::Tiny;
+
+########################################################################
+sub _kms_sign {
+########################################################################
+  my ( $self, $key_id, $message ) = @_;
+
+  my $kms = $self->_get_kms;
+
+  return $kms->Sign(
+    { Message          => $message,
+      MessageType      => 'RAW',
+      SigningAlgorithm => 'ECDSA_SHA_256',
+      KeyId            => $key_id,
+    }
+  );
+}
+
+########################################################################
+sub _get_kms {
+########################################################################
+  my ($self) = @_;
+
+  require Amazon::API::KMS;
+
+  return $self->get_kms
+    if $self->get_kms;
+
+  my $kms = Amazon::API::KMS->new(
+    log_level => $self->get_log_level,
+    profile   => $self->get_profile // $ENV{AWS_PROFILE}
+  );
+  $self->set_kms($kms);
+
+  return $kms;
+}
+
+########################################################################
+sub _kms_get_public_key {
+########################################################################
+  my ( $self, $key_id ) = @_;
+
+  my $kms = $self->_get_kms;
+
+  return $kms->GetPublicKey( { KeyId => $key_id } );
+}
+
+########################################################################
+sub _kms_create_alias {
+########################################################################
+  my ( $self, $key_id, $alias ) = @_;
+
+  my $kms = $self->_get_kms;
+
+  return $kms->CreateAlias( { TargetKeyId => $key_id, AliasName => $alias } );
+}
+
+########################################################################
+sub _kms_describe_key {
+########################################################################
+  my ( $self, $key_id ) = @_;
+
+  my $kms = $self->_get_kms;
+
+  return $kms->DescribeKey( { KeyId => $key_id } );
+}
+
+########################################################################
+sub _kms_create_key {
+########################################################################
+  my ( $self, %args ) = @_;
+
+  my $kms = $self->_get_kms;
+
+  my $req = {
+    KeySpec  => $args{key_spec},
+    KeyUsage => $args{key_usage},
+    $args{description} ? ( Description => $args{description} ) : (),
+  };
+
+  return $kms->CreateKey($req);
+}
+
+1;
