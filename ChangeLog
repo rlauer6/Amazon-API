@@ -1,9 +1,33 @@
+Thu Aug 13 17:27:57 2026  Rob Lauer  <rclauer@gmail.com>
+
+	[2.5.1]:
+	* release-notes: updated
+	* release-notes/release-notes-2.5.1.md: new
+	* VERSION: bump
+	* Amazon-API.pem: new
+	* buildspec.yml: add above to distribution
+	* lib/Amazon/API/Provenance/Role/Records.pm.in: new
+	* .gitignore: +bin/amz-api
+	* deps.mk: +lib/Amazon/API/Provenance/Role/Records.pm.in
+	* lib/Amazon/API/Botocore.pm.in
+	(render_stub)
+	- croak if we can't find the botocore-version.json file
+	(create_stub): accept a logger
+	* lib/Amazon/API/Provenance.pm.in
+	- use the new Amazon::API::Provenance::Role::Records role
+	(cmd_create_provenance)
+	- call _create_provenance_records (moved the code out of here)
+	(_verify_provenance): moved to Amazon::API::Provenance::Role::Records
+	(_write_provenance_records): likewise
+	(_sign_provenance_records): likewise
+	(_create_tarball_digest): likewise
+
 Tue Aug 11 11:52:31 2026  Rob Lauer  <rclauer@gmail.com>
 
 	[2.5.0]:
 	* release-notes: updated
 	* release-notes/release-notes-2.5.0.md: new
-	* VERSION: modified
+	* VERSION: bump
 	* .gitignore
 	- + botocore-vresion, json, bin/amzn-api-provenance, provenance*, local/**
 	* .includes/local.mk: added by CPAN::Maker::Bootstrapper

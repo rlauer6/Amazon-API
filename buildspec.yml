@@ -20,6 +20,7 @@ extra-files:
       - release-notes.md
       - services.api
       - botocore-metadata.api
+      - Amazon-API.pem
 resources:
   bugtracker:
     mailto: rclauer@gmail.com

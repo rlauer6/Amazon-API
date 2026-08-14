@@ -58,11 +58,14 @@
 
 # ./lib/Amazon/API/Provenance.pm.in
 ./lib/Amazon/API/Provenance.pm: \
-    ./lib/Amazon/API.pm \
     ./lib/Amazon/API/Botocore.pm \
-    ./lib/Amazon/API/BuildInfo.pm \
     ./lib/Amazon/API/Provenance/Role/KMS.pm \
+    ./lib/Amazon/API/Provenance/Role/Records.pm \
     ./lib/Amazon/API/Provenance/Role/SSM.pm
+
+# ./lib/Amazon/API/Provenance/Role/Records.pm.in
+./lib/Amazon/API/Provenance/Role/Records.pm: \
+    ./lib/Amazon/API/BuildInfo.pm
 
 # ./lib/Amazon/API/Template.pm.in
 ./lib/Amazon/API/Template.pm: \

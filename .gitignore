@@ -39,3 +39,4 @@ extra-files.mk
 bin/amzn-api-provenance
 local/**
 provenance*
+bin/amzn-api

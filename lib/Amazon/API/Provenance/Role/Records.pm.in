@@ -1,0 +1,144 @@
+package Amazon::API::Provenance::Role::Records;
+
+use strict;
+use warnings;
+
+use Amazon::API::BuildInfo;
+use English qw(-no_match_vars);
+use CLI::Simple::Utils qw(slurp slurp_json);
+use Cwd qw(getcwd);
+use Data::Dumper;
+use Digest::SHA qw(sha256_hex);
+use File::Basename qw(basename);
+use JSON;
+use Role::Tiny;
+
+use Readonly;
+Readonly::Scalar our $KEY_ALIAS         => 'alias/provenance-signing';
+Readonly::Scalar our $SIGNING_ALGORITHM => 'ECDSA_SHA_256';
+
+########################################################################
+sub _key_alias { return $KEY_ALIAS }
+########################################################################
+
+########################################################################
+sub _create_provenance_records {
+########################################################################
+  my ( $self, %args ) = @_;
+
+  my ( $module_name, $service, $service_meta, $key_alias, $botocore_version, $tarball )
+    = @args{qw(module_name service service_meta key_alias botocore_version tarball)};
+
+  my %provenance_record = (
+    'provenance_version'              => 1,
+    'hash_algo'                       => 'sha256',
+    'botocore'                        => $botocore_version,
+    'service-2.json'                  => $service_meta->{service_2_digest},
+    'paginators-1.json'               => $service_meta->{paginators_1_digest},
+    'Amazon::API::BuildInfo::GIT_SHA' => $Amazon::API::BuildInfo::GIT_SHA,
+    'Amazon::API::BuildInfo::VERSION' => $Amazon::API::BuildInfo::VERSION,
+    'module_name'                     => $module_name,
+    'service'                         => sprintf( '%s/%s', $service, $service_meta->{date} ),
+  );
+
+  my $digest_meta = $self->_create_tarball_digest( $tarball, $args{output_path} );
+  %provenance_record = ( %provenance_record, %{$digest_meta} );
+
+  my $provenance_record_to_sign = JSON->new->pretty->canonical->encode( \%provenance_record );
+
+  my $basename = basename( $provenance_record{tarball}, '.tar.gz' );
+
+  $self->_write_provenance_record( $provenance_record_to_sign, $basename, $args{output_path} );
+
+  $self->_sign_provenance_record( $provenance_record_to_sign, $basename, $args{output_path} );
+
+  my $verify_rsp = eval { return $self->_verify_provenance( $key_alias, $basename, $args{output_path} ); };
+
+  die "ERROR: unable to verify provenance files\n$EVAL_ERROR"
+    if !$verify_rsp || $EVAL_ERROR;
+
+  return $verify_rsp->{SignatureValid};
+}
+
+########################################################################
+sub _verify_provenance {
+########################################################################
+  my ( $self, $key_alias, $basename, $output_path ) = @_;
+  $output_path //= getcwd;
+
+  return $self->_get_kms->Verify(
+    { KeyId            => $key_alias,
+      Message          => slurp("$output_path/$basename.json"),
+      MessageType      => 'RAW',
+      SigningAlgorithm => $SIGNING_ALGORITHM,
+      Signature        => slurp("$output_path/$basename.sig"),
+    }
+  );
+}
+
+########################################################################
+sub _write_provenance_record {
+########################################################################
+  my ( $self, $provenance_record, $basename, $output_path ) = @_;
+  $output_path //= getcwd;
+
+  open my $fh, '>', "$output_path/$basename.json"
+    or die "ERROR: could not open provenance.json for writing\n$OS_ERROR";
+
+  print {$fh} $provenance_record;
+
+  close $fh;
+
+  return;
+}
+
+########################################################################
+sub _sign_provenance_record {
+########################################################################
+  my ( $self, $provenance_record, $basename, $output_path ) = @_;
+  $output_path //= getcwd;
+
+  my $sign_rsp = $self->_kms_sign( $KEY_ALIAS, $provenance_record );
+
+  $self->get_logger->debug( Dumper( [ sign_rsp => $sign_rsp ] ) );
+
+  open my $fh, '>', "$output_path/$basename.sig"
+    or die "ERROR: could not open provenance.json.sig for writing\n$OS_ERROR";
+
+  binmode $fh;
+
+  print {$fh} $sign_rsp->{Signature};
+
+  close $fh;
+
+  return;
+}
+
+########################################################################
+sub _create_tarball_digest {
+########################################################################
+  my ( $self, $tarball, $output_path ) = @_;
+
+  my $fullpath = "$output_path/$tarball";
+
+  die "ERROR: $fullpath not found\n"
+    if !-e "$fullpath";
+
+  require Archive::Tar;
+
+  my $tar = Archive::Tar->new;
+
+  $tar->read( $fullpath, 1 );
+
+  my @sha256sums;
+
+  foreach my $f ( $tar->list_files() ) {
+    next if $f !~ /[.]pm$/xsm;
+
+    push @sha256sums, sha256_hex( $tar->get_content($f) );
+  }
+
+  return { tarball => $tarball, digest => sha256_hex("@sha256sums") };
+}
+
+1;

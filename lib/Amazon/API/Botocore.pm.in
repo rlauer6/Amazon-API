@@ -20,7 +20,7 @@ use Amazon::API::BuildInfo;
 
 use Carp;
 use CLI::Simple::Utils qw(slurp_json slurp);
-use Cwd;
+use Cwd qw(getcwd);
 use Data::Dumper;
 use Digest::SHA qw(sha256_hex);
 use English qw( -no_match_vars );
@@ -306,7 +306,11 @@ sub render_stub {
   my $paginators_1_digest = $parameters->{paginators_1_digest};
   my $service_2_digest    = $parameters->{service_2_digest};
 
-  my $botocore_version = eval { slurp_json('botocore-version.json'); } // {};
+  my $botocore_version = eval { slurp_json('botocore-version.json'); };
+
+  croak sprintf "ERROR: could not load botocore-version from %s/botocore-version.json\n$EVAL_ERROR"
+    if !$botocore_version;
+
   $parameters->{ to_template_var('botocore_version') } = $botocore_version->{version};
   $parameters->{ to_template_var('botocore_commit') }  = $botocore_version->{commit};
 
@@ -902,6 +906,7 @@ sub create_stub {
   }
 
   my $module = render_stub(
+    logger     => $options{logger},
     service    => $service,
     template   => fetch_template( *DATA, $TEMPLATE_START ),
     parameters => $parameters,

@@ -3,17 +3,12 @@ package Amazon::API::Provenance;
 use strict;
 use warnings;
 
-use Amazon::API::BuildInfo;
-use Amazon::API;
 use Amazon::API::Botocore;
-
 use CLI::Simple::Constants qw(:booleans);
 use CLI::Simple::Utils qw(slurp_json choose slurp);
 use Cwd qw(getcwd);
 use Data::Dumper;
-use Digest::SHA qw(sha256_hex);
 use English qw(-no_match_vars);
-use File::Basename qw(basename);
 use JSON;
 use MIME::Base64 qw(decode_base64 encode_base64);
 use Storable qw(retrieve);
@@ -21,6 +16,7 @@ use Storable qw(retrieve);
 use Role::Tiny::With;
 with 'Amazon::API::Provenance::Role::KMS';
 with 'Amazon::API::Provenance::Role::SSM';
+with 'Amazon::API::Provenance::Role::Records';
 
 use Readonly;
 Readonly::Scalar our $KEY_ALIAS         => 'alias/provenance-signing';
@@ -57,35 +53,25 @@ sub cmd_create_provenance {
 
   my $module_name = Amazon::API::Botocore::_module_name($service);
 
-  my %provenance_record = (
-    'provenance_version'              => 1,
-    'hash_algo'                       => 'sha256',
-    'botocore'                        => $botocore_version,
-    'service-2.json'                  => $service_meta->{service_2_digest},
-    'paginators-1.json'               => $service_meta->{paginators_1_digest},
-    'Amazon::API::BuildInfo::GIT_SHA' => $Amazon::API::BuildInfo::GIT_SHA,
-    'Amazon::API::BuildInfo::VERSION' => $Amazon::API::BuildInfo::VERSION,
-    'module_name'                     => $module_name,
-    'service'                         => sprintf( '%s/%s', $service, $service_meta->{date} ),
+  my $basename = $module_name;
+  $basename =~ s/::/-/xsmg;
+  my $version = $service_meta->{date};
+  $version =~ s/[-]/./xsmg;
+
+  $basename = sprintf '%s-%s', $basename, $version;
+  my $tarball = sprintf '%s.tar.gz', $basename;
+
+  my $verified = $self->_create_provenance_records(
+    module_name      => $module_name,
+    service_meta     => $service_meta,
+    botocore_version => $botocore_version,
+    service          => $service,
+    key_alias        => $key_alias,
+    tarball          => $tarball,
+    output_path      => $self->get_output_path // getcwd,
   );
 
-  my $digest_meta = $self->_create_tarball_digest($module_name);
-  %provenance_record = ( %provenance_record, %{$digest_meta} );
-
-  my $provenance_record_to_sign = JSON->new->pretty->canonical->encode( \%provenance_record );
-
-  my $basename = basename( $provenance_record{tarball}, '.tar.gz' );
-
-  $self->_write_provenance_record( $provenance_record_to_sign, $basename );
-
-  $self->_sign_provenance_record( $provenance_record_to_sign, $basename );
-
-  my $verify_rsp = eval { return $self->_verify_provenance( $key_alias, $basename ); };
-
-  die "ERROR: unable to verify provenance files\n$EVAL_ERROR"
-    if !$verify_rsp || $EVAL_ERROR;
-
-  if ( !$verify_rsp->{SignatureValid} ) {
+  if ( !$verified ) {
     print {*STDERR} "ERROR: verification failed.\n";
     return $FAILURE;
   }
@@ -318,87 +304,6 @@ sub _validate_key_alias {
   };
 
   return $key_alias;
-}
-
-########################################################################
-sub _verify_provenance {
-########################################################################
-  my ( $self, $key_alias, $basename ) = @_;
-
-  return $self->_get_kms->Verify(
-    { KeyId            => $key_alias,
-      Message          => slurp("$basename.json"),
-      MessageType      => 'RAW',
-      SigningAlgorithm => $SIGNING_ALGORITHM,
-      Signature        => slurp("$basename.sig"),
-    }
-  );
-}
-
-########################################################################
-sub _write_provenance_record {
-########################################################################
-  my ( $self, $provenance_record, $basename ) = @_;
-
-  open my $fh, '>', "$basename.json"
-    or die "ERROR: could not open provenance.json for writing\n$OS_ERROR";
-
-  print {$fh} $provenance_record;
-
-  close $fh;
-
-  return;
-}
-
-########################################################################
-sub _sign_provenance_record {
-########################################################################
-  my ( $self, $provenance_record, $basename ) = @_;
-
-  my $sign_rsp = $self->_kms_sign( $KEY_ALIAS, $provenance_record );
-
-  $self->get_logger->debug( Dumper( [ sign_rsp => $sign_rsp ] ) );
-
-  open my $fh, '>', "$basename.sig"
-    or die "ERROR: could not open provenance.json.sig for writing\n$OS_ERROR";
-
-  binmode $fh;
-
-  print {$fh} $sign_rsp->{Signature};
-
-  close $fh;
-
-  return;
-}
-
-########################################################################
-sub _create_tarball_digest {
-########################################################################
-  my ( $self, $module_name ) = @_;
-
-  my $tarball = $module_name;
-  $tarball =~ s/::/-/xsmg;
-
-  ($tarball) = glob "$tarball-*.tar.gz";
-
-  die "ERROR: no tarball for $module_name\n"
-    if !$tarball;
-
-  require Archive::Tar;
-
-  my $tar = Archive::Tar->new;
-
-  $tar->read( $tarball, 1 );
-
-  my @sha256sums;
-
-  foreach my $f ( $tar->list_files() ) {
-    next if $f !~ /[.]pm$/xsm;
-
-    push @sha256sums, sha256_hex( $tar->get_content($f) );
-  }
-
-  return { tarball => $tarball, digest => sha256_hex("@sha256sums") };
 }
 
 ########################################################################
