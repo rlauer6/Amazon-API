@@ -3,8 +3,142 @@ package Amazon::API::BuildInfo;
 use strict;
 use warnings;
 
+use Carp;
+use CLI::Simple::Utils qw(slurp_json);
+use English qw(-no_match_vars);
+
+use File::ShareDir qw(dist_file);
+use JSON;
+
 our $GIT_SHA   = '@GIT_SHA@';
 our $GIT_DIRTY = '@GIT_DIRTY@';
 our $VERSION   = '@PACKAGE_VERSION@';
 
+########################################################################
+sub version {
+########################################################################
+  my ($self) = @_;
+
+  my $botocore_version_file = eval {
+    return 'botocore-version.json'
+      if -e 'botocore-version.json';
+
+    return dist_file( 'Amazon-API', 'botocore-version.json' );
+  };
+
+  croak "ERROR: could not read botocore-version.json\n$EVAL_ERROR"
+    if !$botocore_version_file || $EVAL_ERROR;
+
+  my $botocore_version = slurp_json($botocore_version_file);
+
+  return { commit => $GIT_SHA, version => $VERSION, dirty => $GIT_DIRTY, botocore_version => $botocore_version };
+}
+
+########################################################################
+sub botocore_version {
+########################################################################
+  my ($self) = @_;
+
+  my $version = $self->version();
+
+  return @{ $version->{botocore_version} }{qw(version commit)};
+}
+
 1;
+
+__END__
+
+=pod
+
+=encoding utf8
+
+=head1 NAME
+
+Amazon::API::BuildInfo - build-time version and provenance metadata for Amazon::API
+
+=head1 SYNOPSIS
+
+ use Amazon::API::BuildInfo;
+
+ my $info = Amazon::API::BuildInfo->version;
+
+ $info->{version};                     # Amazon::API version, e.g. '2.6.0'
+ $info->{commit};                      # the Amazon::API git commit it was built from
+ $info->{dirty};                       # commit, with a '-dirty' suffix if the tree was dirty
+ $info->{botocore_version}{version};   # the pinned botocore tag,    e.g. '1.43.74'
+ $info->{botocore_version}{commit};    # the pinned botocore commit
+
+my ( $bc_version, $bc_commit ) = Amazon::API::BuildInfo->botocore_version;
+
+=head1 DESCRIPTION
+
+C<Amazon::API::BuildInfo> records the identity of an C<Amazon::API> build:
+its released version, the git commit it was built from (and whether that
+tree was dirty), and the botocore release the shipped service metadata was
+generated against.
+
+The C<Amazon::API> version and git identity are baked into the module at
+build time. The botocore pin is read at run time from the
+F<botocore-version.json> that ships in the distribution's share directory
+(so it always reflects the botocore snapshot this C<Amazon::API> was built
+against).
+
+Downstream tooling relies on this as the single source of truth for "which
+versions produced this build" — the API build factory resolves the botocore
+tag to pin its platform image from C<< ->version->{botocore_version}{version} >>,
+and the provenance records attest builds against it. The C<dirty> field
+supports a build-hygiene check: a clean build has C<dirty> equal to
+C<commit>, so C<< $info->{dirty} ne $info->{commit} >> detects a build made
+from an uncommitted working tree.
+
+=head1 METHODS AND SUBROUTINES
+
+=head2 version
+
+my $info = Amazon::API::BuildInfo->version;
+
+Returns a hash reference describing the build:
+
+=over 4
+
+=item version
+
+The C<Amazon::API> release version (e.g. C<2.6.0>).
+
+=item commit
+
+The git commit C<Amazon::API> was built from.
+
+=item dirty
+
+The same commit, suffixed with C<-dirty> when the working tree was dirty at
+build time; equal to C<commit> otherwise.
+
+=item botocore_version
+
+A hash reference C<< { version =E<gt> $tag, commit =E<gt> $sha } >> naming the
+botocore release the shipped metadata was generated against, read from
+F<botocore-version.json>.
+
+=back
+
+Croaks if F<botocore-version.json> cannot be located.
+
+=head2 botocore_version
+
+my ( $version, $commit ) = Amazon::API::BuildInfo->botocore_version;
+
+Convenience accessor returning the pinned botocore release as a two-element
+list — the C<version> (tag) and C<commit> — equivalent to
+C<< @{ Amazon::API::BuildInfo->version->{botocore_version} }{qw(version commit)} >>.
+Note that it returns a list, not a hash reference.
+
+=head1 SEE ALSO
+
+L<Amazon::API>, L<Amazon::API::Provenance>
+
+=head1 AUTHOR
+
+Rob Lauer - <rlauer@treasurersbriefcase.com>
+
+=cut

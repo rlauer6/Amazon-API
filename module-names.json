@@ -1,0 +1,2166 @@
+{
+   "accessanalyzer" : {
+      "auto_generated" : true,
+      "module_name" : "AccessAnalyzer",
+      "service_id" : "AccessAnalyzer"
+   },
+   "account" : {
+      "auto_generated" : true,
+      "module_name" : "Account",
+      "service_id" : "Account"
+   },
+   "account-access" : {
+      "auto_generated" : true,
+      "module_name" : "AccountAccess"
+   },
+   "acm" : {
+      "auto_generated" : true,
+      "module_name" : "ACM",
+      "service_id" : "ACM"
+   },
+   "acm-pca" : {
+      "auto_generated" : true,
+      "module_name" : "ACMPCA",
+      "service_id" : "ACM PCA"
+   },
+   "agent-registry" : {
+      "auto_generated" : true,
+      "module_name" : "AgentRegistry"
+   },
+   "agent-registry-control" : {
+      "auto_generated" : true,
+      "module_name" : "AgentRegistryControl"
+   },
+   "aiops" : {
+      "auto_generated" : true,
+      "module_name" : "AIOps",
+      "service_id" : "AIOps"
+   },
+   "amp" : {
+      "auto_generated" : true,
+      "module_name" : "AMP",
+      "service_id" : "amp"
+   },
+   "amplify" : {
+      "auto_generated" : true,
+      "module_name" : "Amplify",
+      "service_id" : "Amplify"
+   },
+   "amplifybackend" : {
+      "auto_generated" : true,
+      "module_name" : "AmplifyBackend",
+      "service_id" : "AmplifyBackend"
+   },
+   "amplifyuibuilder" : {
+      "auto_generated" : true,
+      "module_name" : "AmplifyUIBuilder",
+      "service_id" : "AmplifyUIBuilder"
+   },
+   "apigateway" : {
+      "auto_generated" : true,
+      "module_name" : "APIGateway",
+      "service_id" : "API Gateway"
+   },
+   "apigatewaymanagementapi" : {
+      "auto_generated" : true,
+      "module_name" : "ApiGatewayManagementApi",
+      "service_id" : "ApiGatewayManagementApi"
+   },
+   "apigatewayv2" : {
+      "auto_generated" : true,
+      "module_name" : "ApiGatewayV2",
+      "service_id" : "ApiGatewayV2"
+   },
+   "appconfig" : {
+      "auto_generated" : true,
+      "module_name" : "AppConfig",
+      "service_id" : "AppConfig"
+   },
+   "appconfigdata" : {
+      "auto_generated" : true,
+      "module_name" : "AppConfigData",
+      "service_id" : "AppConfigData"
+   },
+   "appfabric" : {
+      "auto_generated" : true,
+      "module_name" : "AppFabric",
+      "service_id" : "AppFabric"
+   },
+   "appflow" : {
+      "auto_generated" : true,
+      "module_name" : "Appflow",
+      "service_id" : "Appflow"
+   },
+   "appintegrations" : {
+      "auto_generated" : true,
+      "module_name" : "AppIntegrations",
+      "service_id" : "AppIntegrations"
+   },
+   "application-autoscaling" : {
+      "auto_generated" : true,
+      "module_name" : "ApplicationAutoScaling",
+      "service_id" : "Application Auto Scaling"
+   },
+   "application-insights" : {
+      "auto_generated" : true,
+      "module_name" : "ApplicationInsights",
+      "service_id" : "Application Insights"
+   },
+   "application-signals" : {
+      "auto_generated" : true,
+      "module_name" : "ApplicationSignals",
+      "service_id" : "Application Signals"
+   },
+   "applicationcostprofiler" : {
+      "auto_generated" : true,
+      "module_name" : "ApplicationCostProfiler",
+      "service_id" : "ApplicationCostProfiler"
+   },
+   "appmesh" : {
+      "auto_generated" : true,
+      "module_name" : "AppMesh",
+      "service_id" : "App Mesh"
+   },
+   "apprunner" : {
+      "auto_generated" : true,
+      "module_name" : "AppRunner",
+      "service_id" : "AppRunner"
+   },
+   "appstream" : {
+      "auto_generated" : true,
+      "module_name" : "AppStream",
+      "service_id" : "AppStream"
+   },
+   "appsync" : {
+      "auto_generated" : true,
+      "module_name" : "AppSync",
+      "service_id" : "AppSync"
+   },
+   "arc-region-switch" : {
+      "auto_generated" : true,
+      "module_name" : "ARCRegionSwitch",
+      "service_id" : "ARC Region switch"
+   },
+   "arc-zonal-shift" : {
+      "auto_generated" : true,
+      "module_name" : "ARCZonalShift",
+      "service_id" : "ARC Zonal Shift"
+   },
+   "artifact" : {
+      "auto_generated" : true,
+      "module_name" : "Artifact",
+      "service_id" : "Artifact"
+   },
+   "athena" : {
+      "auto_generated" : true,
+      "module_name" : "Athena",
+      "service_id" : "Athena"
+   },
+   "auditmanager" : {
+      "auto_generated" : true,
+      "module_name" : "AuditManager",
+      "service_id" : "AuditManager"
+   },
+   "autoscaling" : {
+      "auto_generated" : true,
+      "module_name" : "AutoScaling",
+      "service_id" : "Auto Scaling"
+   },
+   "autoscaling-plans" : {
+      "auto_generated" : true,
+      "module_name" : "AutoScalingPlans",
+      "service_id" : "Auto Scaling Plans"
+   },
+   "b2bi" : {
+      "auto_generated" : false,
+      "module_name" : "B2BI",
+      "service_id" : "b2bi"
+   },
+   "backup" : {
+      "auto_generated" : true,
+      "module_name" : "Backup",
+      "service_id" : "Backup"
+   },
+   "backup-gateway" : {
+      "auto_generated" : true,
+      "module_name" : "BackupGateway",
+      "service_id" : "Backup Gateway"
+   },
+   "backupsearch" : {
+      "auto_generated" : true,
+      "module_name" : "BackupSearch",
+      "service_id" : "BackupSearch"
+   },
+   "batch" : {
+      "auto_generated" : true,
+      "module_name" : "Batch",
+      "service_id" : "Batch"
+   },
+   "bcm-dashboards" : {
+      "auto_generated" : true,
+      "module_name" : "BCMDashboards",
+      "service_id" : "BCM Dashboards"
+   },
+   "bcm-data-exports" : {
+      "auto_generated" : true,
+      "module_name" : "BCMDataExports",
+      "service_id" : "BCM Data Exports"
+   },
+   "bcm-pricing-calculator" : {
+      "auto_generated" : true,
+      "module_name" : "BCMPricingCalculator",
+      "service_id" : "BCM Pricing Calculator"
+   },
+   "bcm-recommended-actions" : {
+      "auto_generated" : true,
+      "module_name" : "BCMRecommendedActions",
+      "service_id" : "BCM Recommended Actions"
+   },
+   "bedrock" : {
+      "auto_generated" : true,
+      "module_name" : "Bedrock",
+      "service_id" : "Bedrock"
+   },
+   "bedrock-agent" : {
+      "auto_generated" : true,
+      "module_name" : "BedrockAgent",
+      "service_id" : "Bedrock Agent"
+   },
+   "bedrock-agent-runtime" : {
+      "auto_generated" : true,
+      "module_name" : "BedrockAgentRuntime",
+      "service_id" : "Bedrock Agent Runtime"
+   },
+   "bedrock-agentcore" : {
+      "auto_generated" : true,
+      "module_name" : "BedrockAgentCore",
+      "service_id" : "Bedrock AgentCore"
+   },
+   "bedrock-agentcore-control" : {
+      "auto_generated" : true,
+      "module_name" : "BedrockAgentCoreControl",
+      "service_id" : "Bedrock AgentCore Control"
+   },
+   "bedrock-data-automation" : {
+      "auto_generated" : true,
+      "module_name" : "BedrockDataAutomation",
+      "service_id" : "Bedrock Data Automation"
+   },
+   "bedrock-data-automation-runtime" : {
+      "auto_generated" : true,
+      "module_name" : "BedrockDataAutomationRuntime",
+      "service_id" : "Bedrock Data Automation Runtime"
+   },
+   "bedrock-runtime" : {
+      "auto_generated" : true,
+      "module_name" : "BedrockRuntime",
+      "service_id" : "Bedrock Runtime"
+   },
+   "billing" : {
+      "auto_generated" : true,
+      "module_name" : "Billing",
+      "service_id" : "Billing"
+   },
+   "billingconductor" : {
+      "auto_generated" : false,
+      "module_name" : "BillingConductor",
+      "service_id" : "billingconductor"
+   },
+   "braket" : {
+      "auto_generated" : true,
+      "module_name" : "Braket",
+      "service_id" : "Braket"
+   },
+   "budgets" : {
+      "auto_generated" : true,
+      "module_name" : "Budgets",
+      "service_id" : "Budgets"
+   },
+   "ce" : {
+      "auto_generated" : true,
+      "module_name" : "CostExplorer",
+      "service_id" : "Cost Explorer"
+   },
+   "chatbot" : {
+      "auto_generated" : true,
+      "module_name" : "Chatbot",
+      "service_id" : "chatbot"
+   },
+   "chime" : {
+      "auto_generated" : true,
+      "module_name" : "Chime",
+      "service_id" : "Chime"
+   },
+   "chime-sdk-identity" : {
+      "auto_generated" : true,
+      "module_name" : "ChimeSDKIdentity",
+      "service_id" : "Chime SDK Identity"
+   },
+   "chime-sdk-media-pipelines" : {
+      "auto_generated" : true,
+      "module_name" : "ChimeSDKMediaPipelines",
+      "service_id" : "Chime SDK Media Pipelines"
+   },
+   "chime-sdk-meetings" : {
+      "auto_generated" : true,
+      "module_name" : "ChimeSDKMeetings",
+      "service_id" : "Chime SDK Meetings"
+   },
+   "chime-sdk-messaging" : {
+      "auto_generated" : true,
+      "module_name" : "ChimeSDKMessaging",
+      "service_id" : "Chime SDK Messaging"
+   },
+   "chime-sdk-voice" : {
+      "auto_generated" : true,
+      "module_name" : "ChimeSDKVoice",
+      "service_id" : "Chime SDK Voice"
+   },
+   "cleanrooms" : {
+      "auto_generated" : true,
+      "module_name" : "CleanRooms",
+      "service_id" : "CleanRooms"
+   },
+   "cleanroomsml" : {
+      "auto_generated" : true,
+      "module_name" : "CleanRoomsML",
+      "service_id" : "CleanRoomsML"
+   },
+   "cloud9" : {
+      "auto_generated" : true,
+      "module_name" : "Cloud9",
+      "service_id" : "Cloud9"
+   },
+   "cloudcontrol" : {
+      "auto_generated" : true,
+      "module_name" : "CloudControl",
+      "service_id" : "CloudControl"
+   },
+   "clouddirectory" : {
+      "auto_generated" : true,
+      "module_name" : "CloudDirectory",
+      "service_id" : "CloudDirectory"
+   },
+   "cloudformation" : {
+      "auto_generated" : true,
+      "module_name" : "CloudFormation",
+      "service_id" : "CloudFormation"
+   },
+   "cloudfront" : {
+      "auto_generated" : true,
+      "module_name" : "CloudFront",
+      "service_id" : "CloudFront"
+   },
+   "cloudfront-keyvaluestore" : {
+      "auto_generated" : true,
+      "module_name" : "CloudFrontKeyValueStore",
+      "service_id" : "CloudFront KeyValueStore"
+   },
+   "cloudhsm" : {
+      "auto_generated" : true,
+      "module_name" : "CloudHSM",
+      "service_id" : "CloudHSM"
+   },
+   "cloudhsmv2" : {
+      "auto_generated" : true,
+      "module_name" : "CloudHSMV2",
+      "service_id" : "CloudHSM V2"
+   },
+   "cloudsearch" : {
+      "auto_generated" : true,
+      "module_name" : "CloudSearch",
+      "service_id" : "CloudSearch"
+   },
+   "cloudsearchdomain" : {
+      "auto_generated" : true,
+      "module_name" : "CloudSearchDomain",
+      "service_id" : "CloudSearch Domain"
+   },
+   "cloudtrail" : {
+      "auto_generated" : true,
+      "module_name" : "CloudTrail",
+      "service_id" : "CloudTrail"
+   },
+   "cloudtrail-data" : {
+      "auto_generated" : true,
+      "module_name" : "CloudTrailData",
+      "service_id" : "CloudTrail Data"
+   },
+   "cloudwatch" : {
+      "auto_generated" : true,
+      "module_name" : "CloudWatch",
+      "service_id" : "CloudWatch"
+   },
+   "codeartifact" : {
+      "auto_generated" : false,
+      "module_name" : "CodeArtifact",
+      "service_id" : "codeartifact"
+   },
+   "codebuild" : {
+      "auto_generated" : true,
+      "module_name" : "CodeBuild",
+      "service_id" : "CodeBuild"
+   },
+   "codecatalyst" : {
+      "auto_generated" : true,
+      "module_name" : "CodeCatalyst",
+      "service_id" : "CodeCatalyst"
+   },
+   "codecommit" : {
+      "auto_generated" : true,
+      "module_name" : "CodeCommit",
+      "service_id" : "CodeCommit"
+   },
+   "codeconnections" : {
+      "auto_generated" : true,
+      "module_name" : "CodeConnections",
+      "service_id" : "CodeConnections"
+   },
+   "codedeploy" : {
+      "auto_generated" : true,
+      "module_name" : "CodeDeploy",
+      "service_id" : "CodeDeploy"
+   },
+   "codeguru-reviewer" : {
+      "auto_generated" : true,
+      "module_name" : "CodeGuruReviewer",
+      "service_id" : "CodeGuru Reviewer"
+   },
+   "codeguru-security" : {
+      "auto_generated" : true,
+      "module_name" : "CodeGuruSecurity",
+      "service_id" : "CodeGuru Security"
+   },
+   "codeguruprofiler" : {
+      "auto_generated" : true,
+      "module_name" : "CodeGuruProfiler",
+      "service_id" : "CodeGuruProfiler"
+   },
+   "codepipeline" : {
+      "auto_generated" : true,
+      "module_name" : "CodePipeline",
+      "service_id" : "CodePipeline"
+   },
+   "codestar-connections" : {
+      "auto_generated" : true,
+      "module_name" : "CodeStarConnections",
+      "service_id" : "CodeStar connections"
+   },
+   "codestar-notifications" : {
+      "auto_generated" : true,
+      "module_name" : "CodestarNotifications",
+      "service_id" : "codestar notifications"
+   },
+   "cognito-identity" : {
+      "auto_generated" : true,
+      "module_name" : "CognitoIdentity",
+      "service_id" : "Cognito Identity"
+   },
+   "cognito-idp" : {
+      "auto_generated" : true,
+      "module_name" : "CognitoIdentityProvider",
+      "service_id" : "Cognito Identity Provider"
+   },
+   "cognito-sync" : {
+      "auto_generated" : true,
+      "module_name" : "CognitoSync",
+      "service_id" : "Cognito Sync"
+   },
+   "comprehend" : {
+      "auto_generated" : true,
+      "module_name" : "Comprehend",
+      "service_id" : "Comprehend"
+   },
+   "comprehendmedical" : {
+      "auto_generated" : true,
+      "module_name" : "ComprehendMedical",
+      "service_id" : "ComprehendMedical"
+   },
+   "compute-optimizer" : {
+      "auto_generated" : true,
+      "module_name" : "ComputeOptimizer",
+      "service_id" : "Compute Optimizer"
+   },
+   "compute-optimizer-automation" : {
+      "auto_generated" : true,
+      "module_name" : "ComputeOptimizerAutomation",
+      "service_id" : "Compute Optimizer Automation"
+   },
+   "config" : {
+      "auto_generated" : true,
+      "module_name" : "ConfigService",
+      "service_id" : "Config Service"
+   },
+   "connect" : {
+      "auto_generated" : true,
+      "module_name" : "Connect",
+      "service_id" : "Connect"
+   },
+   "connect-contact-lens" : {
+      "auto_generated" : true,
+      "module_name" : "ConnectContactLens",
+      "service_id" : "Connect Contact Lens"
+   },
+   "connectcampaigns" : {
+      "auto_generated" : true,
+      "module_name" : "ConnectCampaigns",
+      "service_id" : "ConnectCampaigns"
+   },
+   "connectcampaignsv2" : {
+      "auto_generated" : true,
+      "module_name" : "ConnectCampaignsV2",
+      "service_id" : "ConnectCampaignsV2"
+   },
+   "connectcases" : {
+      "auto_generated" : true,
+      "module_name" : "ConnectCases",
+      "service_id" : "ConnectCases"
+   },
+   "connecthealth" : {
+      "auto_generated" : true,
+      "module_name" : "ConnectHealth",
+      "service_id" : "ConnectHealth"
+   },
+   "connectparticipant" : {
+      "auto_generated" : true,
+      "module_name" : "ConnectParticipant",
+      "service_id" : "ConnectParticipant"
+   },
+   "controlcatalog" : {
+      "auto_generated" : true,
+      "module_name" : "ControlCatalog",
+      "service_id" : "ControlCatalog"
+   },
+   "controltower" : {
+      "auto_generated" : true,
+      "module_name" : "ControlTower",
+      "service_id" : "ControlTower"
+   },
+   "cost-optimization-hub" : {
+      "auto_generated" : true,
+      "module_name" : "CostOptimizationHub",
+      "service_id" : "Cost Optimization Hub"
+   },
+   "cur" : {
+      "auto_generated" : true,
+      "module_name" : "CostAndUsageReportService",
+      "service_id" : "Cost and Usage Report Service"
+   },
+   "customer-profiles" : {
+      "auto_generated" : true,
+      "module_name" : "CustomerProfiles",
+      "service_id" : "Customer Profiles"
+   },
+   "databrew" : {
+      "auto_generated" : true,
+      "module_name" : "DataBrew",
+      "service_id" : "DataBrew"
+   },
+   "dataexchange" : {
+      "auto_generated" : true,
+      "module_name" : "DataExchange",
+      "service_id" : "DataExchange"
+   },
+   "datapipeline" : {
+      "auto_generated" : true,
+      "module_name" : "DataPipeline",
+      "service_id" : "Data Pipeline"
+   },
+   "datasync" : {
+      "auto_generated" : true,
+      "module_name" : "DataSync",
+      "service_id" : "DataSync"
+   },
+   "datazone" : {
+      "auto_generated" : true,
+      "module_name" : "DataZone",
+      "service_id" : "DataZone"
+   },
+   "dax" : {
+      "auto_generated" : true,
+      "module_name" : "DAX",
+      "service_id" : "DAX"
+   },
+   "deadline" : {
+      "auto_generated" : true,
+      "module_name" : "Deadline",
+      "service_id" : "deadline"
+   },
+   "detective" : {
+      "auto_generated" : true,
+      "module_name" : "Detective",
+      "service_id" : "Detective"
+   },
+   "devicefarm" : {
+      "auto_generated" : true,
+      "module_name" : "DeviceFarm",
+      "service_id" : "Device Farm"
+   },
+   "devops-agent" : {
+      "auto_generated" : true,
+      "module_name" : "DevOpsAgent",
+      "service_id" : "DevOps Agent"
+   },
+   "devops-guru" : {
+      "auto_generated" : true,
+      "module_name" : "DevOpsGuru",
+      "service_id" : "DevOps Guru"
+   },
+   "directconnect" : {
+      "auto_generated" : true,
+      "module_name" : "DirectConnect",
+      "service_id" : "Direct Connect"
+   },
+   "discovery" : {
+      "auto_generated" : true,
+      "module_name" : "ApplicationDiscoveryService",
+      "service_id" : "Application Discovery Service"
+   },
+   "dlm" : {
+      "auto_generated" : true,
+      "module_name" : "DLM",
+      "service_id" : "DLM"
+   },
+   "dms" : {
+      "auto_generated" : true,
+      "module_name" : "DatabaseMigrationService",
+      "service_id" : "Database Migration Service"
+   },
+   "docdb" : {
+      "auto_generated" : true,
+      "module_name" : "DocDB",
+      "service_id" : "DocDB"
+   },
+   "docdb-elastic" : {
+      "auto_generated" : true,
+      "module_name" : "DocDBElastic",
+      "service_id" : "DocDB Elastic"
+   },
+   "drs" : {
+      "auto_generated" : true,
+      "module_name" : "DRS",
+      "service_id" : "drs"
+   },
+   "ds" : {
+      "auto_generated" : true,
+      "module_name" : "DirectoryService",
+      "service_id" : "Directory Service"
+   },
+   "ds-data" : {
+      "auto_generated" : true,
+      "module_name" : "DirectoryServiceData",
+      "service_id" : "Directory Service Data"
+   },
+   "dsql" : {
+      "auto_generated" : true,
+      "module_name" : "DSQL",
+      "service_id" : "DSQL"
+   },
+   "dynamodb" : {
+      "auto_generated" : true,
+      "module_name" : "DynamoDB",
+      "service_id" : "DynamoDB"
+   },
+   "dynamodbstreams" : {
+      "auto_generated" : true,
+      "module_name" : "DynamoDBStreams",
+      "service_id" : "DynamoDB Streams"
+   },
+   "ebs" : {
+      "auto_generated" : true,
+      "module_name" : "EBS",
+      "service_id" : "EBS"
+   },
+   "ec2" : {
+      "auto_generated" : true,
+      "module_name" : "EC2",
+      "service_id" : "EC2"
+   },
+   "ec2-instance-connect" : {
+      "auto_generated" : true,
+      "module_name" : "EC2InstanceConnect",
+      "service_id" : "EC2 Instance Connect"
+   },
+   "ecr" : {
+      "auto_generated" : true,
+      "module_name" : "ECR",
+      "service_id" : "ECR"
+   },
+   "ecr-public" : {
+      "auto_generated" : true,
+      "module_name" : "ECRPUBLIC",
+      "service_id" : "ECR PUBLIC"
+   },
+   "ecs" : {
+      "auto_generated" : true,
+      "module_name" : "ECS",
+      "service_id" : "ECS"
+   },
+   "efs" : {
+      "auto_generated" : true,
+      "module_name" : "EFS",
+      "service_id" : "EFS"
+   },
+   "eks" : {
+      "auto_generated" : true,
+      "module_name" : "EKS",
+      "service_id" : "EKS"
+   },
+   "eks-auth" : {
+      "auto_generated" : true,
+      "module_name" : "EKSAuth",
+      "service_id" : "EKS Auth"
+   },
+   "elasticache" : {
+      "auto_generated" : true,
+      "module_name" : "ElastiCache",
+      "service_id" : "ElastiCache"
+   },
+   "elasticbeanstalk" : {
+      "auto_generated" : true,
+      "module_name" : "ElasticBeanstalk",
+      "service_id" : "Elastic Beanstalk"
+   },
+   "elb" : {
+      "auto_generated" : true,
+      "module_name" : "ElasticLoadBalancing",
+      "service_id" : "Elastic Load Balancing"
+   },
+   "elbv2" : {
+      "auto_generated" : false,
+      "module_name" : "ELBv2",
+      "service_id" : "Elastic Load Balancing v2"
+   },
+   "elementalinference" : {
+      "auto_generated" : true,
+      "module_name" : "ElementalInference",
+      "service_id" : "ElementalInference"
+   },
+   "emr" : {
+      "auto_generated" : true,
+      "module_name" : "EMR",
+      "service_id" : "EMR"
+   },
+   "emr-containers" : {
+      "auto_generated" : true,
+      "module_name" : "EMRContainers",
+      "service_id" : "EMR containers"
+   },
+   "emr-serverless" : {
+      "auto_generated" : true,
+      "module_name" : "EMRServerless",
+      "service_id" : "EMR Serverless"
+   },
+   "entityresolution" : {
+      "auto_generated" : true,
+      "module_name" : "EntityResolution",
+      "service_id" : "EntityResolution"
+   },
+   "es" : {
+      "auto_generated" : true,
+      "module_name" : "ElasticsearchService",
+      "service_id" : "Elasticsearch Service"
+   },
+   "events" : {
+      "auto_generated" : true,
+      "module_name" : "EventBridge",
+      "service_id" : "EventBridge"
+   },
+   "evs" : {
+      "auto_generated" : true,
+      "module_name" : "EVS",
+      "service_id" : "evs"
+   },
+   "finspace" : {
+      "auto_generated" : false,
+      "module_name" : "FinSpace",
+      "service_id" : "finspace"
+   },
+   "finspace-data" : {
+      "auto_generated" : true,
+      "module_name" : "FinspaceData",
+      "service_id" : "finspace data"
+   },
+   "firehose" : {
+      "auto_generated" : true,
+      "module_name" : "Firehose",
+      "service_id" : "Firehose"
+   },
+   "fis" : {
+      "auto_generated" : true,
+      "module_name" : "FIS",
+      "service_id" : "fis"
+   },
+   "fms" : {
+      "auto_generated" : true,
+      "module_name" : "FMS",
+      "service_id" : "FMS"
+   },
+   "forecast" : {
+      "auto_generated" : true,
+      "module_name" : "Forecast",
+      "service_id" : "forecast"
+   },
+   "forecastquery" : {
+      "auto_generated" : false,
+      "module_name" : "ForecastQuery",
+      "service_id" : "forecastquery"
+   },
+   "frauddetector" : {
+      "auto_generated" : true,
+      "module_name" : "FraudDetector",
+      "service_id" : "FraudDetector"
+   },
+   "freetier" : {
+      "auto_generated" : true,
+      "module_name" : "FreeTier",
+      "service_id" : "FreeTier"
+   },
+   "fsx" : {
+      "auto_generated" : true,
+      "module_name" : "FSx",
+      "service_id" : "FSx"
+   },
+   "gamelift" : {
+      "auto_generated" : true,
+      "module_name" : "GameLift",
+      "service_id" : "GameLift"
+   },
+   "gameliftstreams" : {
+      "auto_generated" : true,
+      "module_name" : "GameLiftStreams",
+      "service_id" : "GameLiftStreams"
+   },
+   "geo-maps" : {
+      "auto_generated" : true,
+      "module_name" : "GeoMaps",
+      "service_id" : "Geo Maps"
+   },
+   "geo-places" : {
+      "auto_generated" : true,
+      "module_name" : "GeoPlaces",
+      "service_id" : "Geo Places"
+   },
+   "geo-routes" : {
+      "auto_generated" : true,
+      "module_name" : "GeoRoutes",
+      "service_id" : "Geo Routes"
+   },
+   "glacier" : {
+      "auto_generated" : true,
+      "module_name" : "Glacier",
+      "service_id" : "Glacier"
+   },
+   "globalaccelerator" : {
+      "auto_generated" : true,
+      "module_name" : "GlobalAccelerator",
+      "service_id" : "Global Accelerator"
+   },
+   "glue" : {
+      "auto_generated" : true,
+      "module_name" : "Glue",
+      "service_id" : "Glue"
+   },
+   "grafana" : {
+      "auto_generated" : true,
+      "module_name" : "Grafana",
+      "service_id" : "grafana"
+   },
+   "greengrass" : {
+      "auto_generated" : true,
+      "module_name" : "Greengrass",
+      "service_id" : "Greengrass"
+   },
+   "greengrassv2" : {
+      "auto_generated" : true,
+      "module_name" : "GreengrassV2",
+      "service_id" : "GreengrassV2"
+   },
+   "groundstation" : {
+      "auto_generated" : true,
+      "module_name" : "GroundStation",
+      "service_id" : "GroundStation"
+   },
+   "guardduty" : {
+      "auto_generated" : true,
+      "module_name" : "GuardDuty",
+      "service_id" : "GuardDuty"
+   },
+   "health" : {
+      "auto_generated" : true,
+      "module_name" : "Health",
+      "service_id" : "Health"
+   },
+   "healthlake" : {
+      "auto_generated" : true,
+      "module_name" : "HealthLake",
+      "service_id" : "HealthLake"
+   },
+   "iam" : {
+      "auto_generated" : true,
+      "module_name" : "IAM",
+      "service_id" : "IAM"
+   },
+   "identitystore" : {
+      "auto_generated" : false,
+      "module_name" : "IdentityStore",
+      "service_id" : "identitystore"
+   },
+   "imagebuilder" : {
+      "auto_generated" : false,
+      "module_name" : "ImageBuilder",
+      "service_id" : "imagebuilder"
+   },
+   "importexport" : {
+      "auto_generated" : true,
+      "module_name" : "ImportExport",
+      "service_id" : "ImportExport"
+   },
+   "inspector" : {
+      "auto_generated" : true,
+      "module_name" : "Inspector",
+      "service_id" : "Inspector"
+   },
+   "inspector-scan" : {
+      "auto_generated" : true,
+      "module_name" : "InspectorScan",
+      "service_id" : "Inspector Scan"
+   },
+   "inspector2" : {
+      "auto_generated" : true,
+      "module_name" : "Inspector2",
+      "service_id" : "Inspector2"
+   },
+   "interconnect" : {
+      "auto_generated" : true,
+      "module_name" : "Interconnect",
+      "service_id" : "Interconnect"
+   },
+   "internetmonitor" : {
+      "auto_generated" : true,
+      "module_name" : "InternetMonitor",
+      "service_id" : "InternetMonitor"
+   },
+   "invoicing" : {
+      "auto_generated" : true,
+      "module_name" : "Invoicing",
+      "service_id" : "Invoicing"
+   },
+   "iot" : {
+      "auto_generated" : true,
+      "module_name" : "IoT",
+      "service_id" : "IoT"
+   },
+   "iot-data" : {
+      "auto_generated" : true,
+      "module_name" : "IoTDataPlane",
+      "service_id" : "IoT Data Plane"
+   },
+   "iot-jobs-data" : {
+      "auto_generated" : true,
+      "module_name" : "IoTJobsDataPlane",
+      "service_id" : "IoT Jobs Data Plane"
+   },
+   "iot-managed-integrations" : {
+      "auto_generated" : true,
+      "module_name" : "IoTManagedIntegrations",
+      "service_id" : "IoT Managed Integrations"
+   },
+   "iotdeviceadvisor" : {
+      "auto_generated" : false,
+      "module_name" : "IoTDeviceAdvisor",
+      "service_id" : "IotDeviceAdvisor"
+   },
+   "iotevents" : {
+      "auto_generated" : true,
+      "module_name" : "IoTEvents",
+      "service_id" : "IoT Events"
+   },
+   "iotevents-data" : {
+      "auto_generated" : true,
+      "module_name" : "IoTEventsData",
+      "service_id" : "IoT Events Data"
+   },
+   "iotfleetwise" : {
+      "auto_generated" : true,
+      "module_name" : "IoTFleetWise",
+      "service_id" : "IoTFleetWise"
+   },
+   "iotsecuretunneling" : {
+      "auto_generated" : true,
+      "module_name" : "IoTSecureTunneling",
+      "service_id" : "IoTSecureTunneling"
+   },
+   "iotsitewise" : {
+      "auto_generated" : true,
+      "module_name" : "IoTSiteWise",
+      "service_id" : "IoTSiteWise"
+   },
+   "iotthingsgraph" : {
+      "auto_generated" : true,
+      "module_name" : "IoTThingsGraph",
+      "service_id" : "IoTThingsGraph"
+   },
+   "iottwinmaker" : {
+      "auto_generated" : true,
+      "module_name" : "IoTTwinMaker",
+      "service_id" : "IoTTwinMaker"
+   },
+   "iotwireless" : {
+      "auto_generated" : true,
+      "module_name" : "IoTWireless",
+      "service_id" : "IoT Wireless"
+   },
+   "ivs" : {
+      "auto_generated" : true,
+      "module_name" : "IVS",
+      "service_id" : "ivs"
+   },
+   "ivs-realtime" : {
+      "auto_generated" : true,
+      "module_name" : "IVSRealTime",
+      "service_id" : "IVS RealTime"
+   },
+   "ivschat" : {
+      "auto_generated" : false,
+      "module_name" : "IVSChat",
+      "service_id" : "ivschat"
+   },
+   "kafka" : {
+      "auto_generated" : true,
+      "module_name" : "Kafka",
+      "service_id" : "Kafka"
+   },
+   "kafkaconnect" : {
+      "auto_generated" : true,
+      "module_name" : "KafkaConnect",
+      "service_id" : "KafkaConnect"
+   },
+   "kendra" : {
+      "auto_generated" : true,
+      "module_name" : "Kendra",
+      "service_id" : "kendra"
+   },
+   "kendra-ranking" : {
+      "auto_generated" : true,
+      "module_name" : "KendraRanking",
+      "service_id" : "Kendra Ranking"
+   },
+   "keyspaces" : {
+      "auto_generated" : true,
+      "module_name" : "Keyspaces",
+      "service_id" : "Keyspaces"
+   },
+   "keyspacesstreams" : {
+      "auto_generated" : true,
+      "module_name" : "KeyspacesStreams",
+      "service_id" : "KeyspacesStreams"
+   },
+   "kinesis" : {
+      "auto_generated" : true,
+      "module_name" : "Kinesis",
+      "service_id" : "Kinesis"
+   },
+   "kinesis-video-archived-media" : {
+      "auto_generated" : true,
+      "module_name" : "KinesisVideoArchivedMedia",
+      "service_id" : "Kinesis Video Archived Media"
+   },
+   "kinesis-video-media" : {
+      "auto_generated" : true,
+      "module_name" : "KinesisVideoMedia",
+      "service_id" : "Kinesis Video Media"
+   },
+   "kinesis-video-signaling" : {
+      "auto_generated" : true,
+      "module_name" : "KinesisVideoSignaling",
+      "service_id" : "Kinesis Video Signaling"
+   },
+   "kinesis-video-webrtc-storage" : {
+      "auto_generated" : true,
+      "module_name" : "KinesisVideoWebRTCStorage",
+      "service_id" : "Kinesis Video WebRTC Storage"
+   },
+   "kinesisanalytics" : {
+      "auto_generated" : true,
+      "module_name" : "KinesisAnalytics",
+      "service_id" : "Kinesis Analytics"
+   },
+   "kinesisanalyticsv2" : {
+      "auto_generated" : true,
+      "module_name" : "KinesisAnalyticsV2",
+      "service_id" : "Kinesis Analytics V2"
+   },
+   "kinesisvideo" : {
+      "auto_generated" : true,
+      "module_name" : "KinesisVideo",
+      "service_id" : "Kinesis Video"
+   },
+   "kms" : {
+      "auto_generated" : true,
+      "module_name" : "KMS",
+      "service_id" : "KMS"
+   },
+   "lakeformation" : {
+      "auto_generated" : true,
+      "module_name" : "LakeFormation",
+      "service_id" : "LakeFormation"
+   },
+   "lambda" : {
+      "auto_generated" : true,
+      "module_name" : "Lambda",
+      "service_id" : "Lambda"
+   },
+   "lambda-core" : {
+      "auto_generated" : true,
+      "module_name" : "LambdaCore",
+      "service_id" : "Lambda Core"
+   },
+   "lambda-microvms" : {
+      "auto_generated" : true,
+      "module_name" : "LambdaMicrovms",
+      "service_id" : "Lambda Microvms"
+   },
+   "launch-wizard" : {
+      "auto_generated" : true,
+      "module_name" : "LaunchWizard",
+      "service_id" : "Launch Wizard"
+   },
+   "lex-models" : {
+      "auto_generated" : true,
+      "module_name" : "LexModelBuildingService",
+      "service_id" : "Lex Model Building Service"
+   },
+   "lex-runtime" : {
+      "auto_generated" : true,
+      "module_name" : "LexRuntimeService",
+      "service_id" : "Lex Runtime Service"
+   },
+   "lexv2-models" : {
+      "auto_generated" : true,
+      "module_name" : "LexModelsV2",
+      "service_id" : "Lex Models V2"
+   },
+   "lexv2-runtime" : {
+      "auto_generated" : true,
+      "module_name" : "LexRuntimeV2",
+      "service_id" : "Lex Runtime V2"
+   },
+   "license-manager" : {
+      "auto_generated" : true,
+      "module_name" : "LicenseManager",
+      "service_id" : "License Manager"
+   },
+   "license-manager-linux-subscriptions" : {
+      "auto_generated" : true,
+      "module_name" : "LicenseManagerLinuxSubscriptions",
+      "service_id" : "License Manager Linux Subscriptions"
+   },
+   "license-manager-user-subscriptions" : {
+      "auto_generated" : true,
+      "module_name" : "LicenseManagerUserSubscriptions",
+      "service_id" : "License Manager User Subscriptions"
+   },
+   "lightsail" : {
+      "auto_generated" : true,
+      "module_name" : "Lightsail",
+      "service_id" : "Lightsail"
+   },
+   "location" : {
+      "auto_generated" : true,
+      "module_name" : "Location",
+      "service_id" : "Location"
+   },
+   "logs" : {
+      "auto_generated" : true,
+      "module_name" : "CloudWatchLogs",
+      "service_id" : "CloudWatch Logs"
+   },
+   "lookoutequipment" : {
+      "auto_generated" : true,
+      "module_name" : "LookoutEquipment",
+      "service_id" : "LookoutEquipment"
+   },
+   "m2" : {
+      "auto_generated" : true,
+      "module_name" : "M2",
+      "service_id" : "m2"
+   },
+   "machinelearning" : {
+      "auto_generated" : true,
+      "module_name" : "MachineLearning",
+      "service_id" : "Machine Learning"
+   },
+   "macie2" : {
+      "auto_generated" : true,
+      "module_name" : "Macie2",
+      "service_id" : "Macie2"
+   },
+   "mailmanager" : {
+      "auto_generated" : true,
+      "module_name" : "MailManager",
+      "service_id" : "MailManager"
+   },
+   "managedblockchain" : {
+      "auto_generated" : true,
+      "module_name" : "ManagedBlockchain",
+      "service_id" : "ManagedBlockchain"
+   },
+   "managedblockchain-query" : {
+      "auto_generated" : true,
+      "module_name" : "ManagedBlockchainQuery",
+      "service_id" : "ManagedBlockchain Query"
+   },
+   "marketplace-agreement" : {
+      "auto_generated" : true,
+      "module_name" : "MarketplaceAgreement",
+      "service_id" : "Marketplace Agreement"
+   },
+   "marketplace-catalog" : {
+      "auto_generated" : true,
+      "module_name" : "MarketplaceCatalog",
+      "service_id" : "Marketplace Catalog"
+   },
+   "marketplace-deployment" : {
+      "auto_generated" : true,
+      "module_name" : "MarketplaceDeployment",
+      "service_id" : "Marketplace Deployment"
+   },
+   "marketplace-discovery" : {
+      "auto_generated" : true,
+      "module_name" : "MarketplaceDiscovery",
+      "service_id" : "Marketplace Discovery"
+   },
+   "marketplace-entitlement" : {
+      "auto_generated" : true,
+      "module_name" : "MarketplaceEntitlementService",
+      "service_id" : "Marketplace Entitlement Service"
+   },
+   "marketplace-reporting" : {
+      "auto_generated" : true,
+      "module_name" : "MarketplaceReporting",
+      "service_id" : "Marketplace Reporting"
+   },
+   "marketplacecommerceanalytics" : {
+      "auto_generated" : true,
+      "module_name" : "MarketplaceCommerceAnalytics",
+      "service_id" : "Marketplace Commerce Analytics"
+   },
+   "mediaconnect" : {
+      "auto_generated" : true,
+      "module_name" : "MediaConnect",
+      "service_id" : "MediaConnect"
+   },
+   "mediaconvert" : {
+      "auto_generated" : true,
+      "module_name" : "MediaConvert",
+      "service_id" : "MediaConvert"
+   },
+   "medialive" : {
+      "auto_generated" : true,
+      "module_name" : "MediaLive",
+      "service_id" : "MediaLive"
+   },
+   "mediapackage" : {
+      "auto_generated" : true,
+      "module_name" : "MediaPackage",
+      "service_id" : "MediaPackage"
+   },
+   "mediapackage-vod" : {
+      "auto_generated" : true,
+      "module_name" : "MediaPackageVod",
+      "service_id" : "MediaPackage Vod"
+   },
+   "mediapackagev2" : {
+      "auto_generated" : true,
+      "module_name" : "MediaPackageV2",
+      "service_id" : "MediaPackageV2"
+   },
+   "mediastore" : {
+      "auto_generated" : true,
+      "module_name" : "MediaStore",
+      "service_id" : "MediaStore"
+   },
+   "mediastore-data" : {
+      "auto_generated" : true,
+      "module_name" : "MediaStoreData",
+      "service_id" : "MediaStore Data"
+   },
+   "mediatailor" : {
+      "auto_generated" : true,
+      "module_name" : "MediaTailor",
+      "service_id" : "MediaTailor"
+   },
+   "medical-imaging" : {
+      "auto_generated" : true,
+      "module_name" : "MedicalImaging",
+      "service_id" : "Medical Imaging"
+   },
+   "memorydb" : {
+      "auto_generated" : true,
+      "module_name" : "MemoryDB",
+      "service_id" : "MemoryDB"
+   },
+   "meteringmarketplace" : {
+      "auto_generated" : true,
+      "module_name" : "MarketplaceMetering",
+      "service_id" : "Marketplace Metering"
+   },
+   "mgh" : {
+      "auto_generated" : true,
+      "module_name" : "MigrationHub",
+      "service_id" : "Migration Hub"
+   },
+   "mgn" : {
+      "auto_generated" : true,
+      "module_name" : "MGN",
+      "service_id" : "mgn"
+   },
+   "migration-hub-refactor-spaces" : {
+      "auto_generated" : true,
+      "module_name" : "MigrationHubRefactorSpaces",
+      "service_id" : "Migration Hub Refactor Spaces"
+   },
+   "migrationhub-config" : {
+      "auto_generated" : true,
+      "module_name" : "MigrationHubConfig",
+      "service_id" : "MigrationHub Config"
+   },
+   "migrationhuborchestrator" : {
+      "auto_generated" : true,
+      "module_name" : "MigrationHubOrchestrator",
+      "service_id" : "MigrationHubOrchestrator"
+   },
+   "migrationhubstrategy" : {
+      "auto_generated" : true,
+      "module_name" : "MigrationHubStrategy",
+      "service_id" : "MigrationHubStrategy"
+   },
+   "mpa" : {
+      "auto_generated" : true,
+      "module_name" : "MPA",
+      "service_id" : "MPA"
+   },
+   "mq" : {
+      "auto_generated" : true,
+      "module_name" : "MQ",
+      "service_id" : "mq"
+   },
+   "mturk" : {
+      "auto_generated" : true,
+      "module_name" : "MTurk",
+      "service_id" : "MTurk"
+   },
+   "mwaa" : {
+      "auto_generated" : true,
+      "module_name" : "MWAA",
+      "service_id" : "MWAA"
+   },
+   "mwaa-serverless" : {
+      "auto_generated" : true,
+      "module_name" : "MWAAServerless",
+      "service_id" : "MWAA Serverless"
+   },
+   "neptune" : {
+      "auto_generated" : true,
+      "module_name" : "Neptune",
+      "service_id" : "Neptune"
+   },
+   "neptune-graph" : {
+      "auto_generated" : true,
+      "module_name" : "NeptuneGraph",
+      "service_id" : "Neptune Graph"
+   },
+   "neptunedata" : {
+      "auto_generated" : false,
+      "module_name" : "NeptuneData",
+      "service_id" : "neptunedata"
+   },
+   "network-firewall" : {
+      "auto_generated" : true,
+      "module_name" : "NetworkFirewall",
+      "service_id" : "Network Firewall"
+   },
+   "networkflowmonitor" : {
+      "auto_generated" : true,
+      "module_name" : "NetworkFlowMonitor",
+      "service_id" : "NetworkFlowMonitor"
+   },
+   "networkmanager" : {
+      "auto_generated" : true,
+      "module_name" : "NetworkManager",
+      "service_id" : "NetworkManager"
+   },
+   "networkmonitor" : {
+      "auto_generated" : true,
+      "module_name" : "NetworkMonitor",
+      "service_id" : "NetworkMonitor"
+   },
+   "notifications" : {
+      "auto_generated" : true,
+      "module_name" : "Notifications",
+      "service_id" : "Notifications"
+   },
+   "notificationscontacts" : {
+      "auto_generated" : true,
+      "module_name" : "NotificationsContacts",
+      "service_id" : "NotificationsContacts"
+   },
+   "nova-act" : {
+      "auto_generated" : true,
+      "module_name" : "NovaAct",
+      "service_id" : "Nova Act"
+   },
+   "oam" : {
+      "auto_generated" : true,
+      "module_name" : "OAM",
+      "service_id" : "OAM"
+   },
+   "observabilityadmin" : {
+      "auto_generated" : true,
+      "module_name" : "ObservabilityAdmin",
+      "service_id" : "ObservabilityAdmin"
+   },
+   "odb" : {
+      "auto_generated" : true,
+      "module_name" : "ODB",
+      "service_id" : "odb"
+   },
+   "omics" : {
+      "auto_generated" : true,
+      "module_name" : "Omics",
+      "service_id" : "Omics"
+   },
+   "opensearch" : {
+      "auto_generated" : true,
+      "module_name" : "OpenSearch",
+      "service_id" : "OpenSearch"
+   },
+   "opensearchserverless" : {
+      "auto_generated" : true,
+      "module_name" : "OpenSearchServerless",
+      "service_id" : "OpenSearchServerless"
+   },
+   "organizations" : {
+      "auto_generated" : true,
+      "module_name" : "Organizations",
+      "service_id" : "Organizations"
+   },
+   "osis" : {
+      "auto_generated" : true,
+      "module_name" : "OSIS",
+      "service_id" : "OSIS"
+   },
+   "outposts" : {
+      "auto_generated" : true,
+      "module_name" : "Outposts",
+      "service_id" : "Outposts"
+   },
+   "panorama" : {
+      "auto_generated" : true,
+      "module_name" : "Panorama",
+      "service_id" : "Panorama"
+   },
+   "partnercentral-account" : {
+      "auto_generated" : true,
+      "module_name" : "PartnerCentralAccount",
+      "service_id" : "PartnerCentral Account"
+   },
+   "partnercentral-benefits" : {
+      "auto_generated" : true,
+      "module_name" : "PartnerCentralBenefits",
+      "service_id" : "PartnerCentral Benefits"
+   },
+   "partnercentral-channel" : {
+      "auto_generated" : true,
+      "module_name" : "PartnerCentralChannel",
+      "service_id" : "PartnerCentral Channel"
+   },
+   "partnercentral-revenue-measurement" : {
+      "auto_generated" : true,
+      "module_name" : "PartnerCentralRevenueMeasurement"
+   },
+   "partnercentral-selling" : {
+      "auto_generated" : true,
+      "module_name" : "PartnerCentralSelling",
+      "service_id" : "PartnerCentral Selling"
+   },
+   "payment-cryptography" : {
+      "auto_generated" : true,
+      "module_name" : "PaymentCryptography",
+      "service_id" : "Payment Cryptography"
+   },
+   "payment-cryptography-data" : {
+      "auto_generated" : true,
+      "module_name" : "PaymentCryptographyData",
+      "service_id" : "Payment Cryptography Data"
+   },
+   "pca-connector-ad" : {
+      "auto_generated" : true,
+      "module_name" : "PcaConnectorAd",
+      "service_id" : "Pca Connector Ad"
+   },
+   "pca-connector-scep" : {
+      "auto_generated" : true,
+      "module_name" : "PcaConnectorScep",
+      "service_id" : "Pca Connector Scep"
+   },
+   "pcs" : {
+      "auto_generated" : true,
+      "module_name" : "PCS",
+      "service_id" : "PCS"
+   },
+   "personalize" : {
+      "auto_generated" : true,
+      "module_name" : "Personalize",
+      "service_id" : "Personalize"
+   },
+   "personalize-events" : {
+      "auto_generated" : true,
+      "module_name" : "PersonalizeEvents",
+      "service_id" : "Personalize Events"
+   },
+   "personalize-runtime" : {
+      "auto_generated" : true,
+      "module_name" : "PersonalizeRuntime",
+      "service_id" : "Personalize Runtime"
+   },
+   "pi" : {
+      "auto_generated" : true,
+      "module_name" : "PI",
+      "service_id" : "PI"
+   },
+   "pinpoint" : {
+      "auto_generated" : true,
+      "module_name" : "Pinpoint",
+      "service_id" : "Pinpoint"
+   },
+   "pinpoint-email" : {
+      "auto_generated" : true,
+      "module_name" : "PinpointEmail",
+      "service_id" : "Pinpoint Email"
+   },
+   "pinpoint-sms-voice" : {
+      "auto_generated" : true,
+      "module_name" : "PinpointSMSVoice",
+      "service_id" : "Pinpoint SMS Voice"
+   },
+   "pinpoint-sms-voice-v2" : {
+      "auto_generated" : true,
+      "module_name" : "PinpointSMSVoiceV2",
+      "service_id" : "Pinpoint SMS Voice V2"
+   },
+   "pipes" : {
+      "auto_generated" : true,
+      "module_name" : "Pipes",
+      "service_id" : "Pipes"
+   },
+   "polly" : {
+      "auto_generated" : true,
+      "module_name" : "Polly",
+      "service_id" : "Polly"
+   },
+   "pricing" : {
+      "auto_generated" : true,
+      "module_name" : "Pricing",
+      "service_id" : "Pricing"
+   },
+   "pricing-plan-manager" : {
+      "auto_generated" : true,
+      "module_name" : "PricingPlanManager"
+   },
+   "proton" : {
+      "auto_generated" : true,
+      "module_name" : "Proton",
+      "service_id" : "Proton"
+   },
+   "qapps" : {
+      "auto_generated" : true,
+      "module_name" : "QApps",
+      "service_id" : "QApps"
+   },
+   "qbusiness" : {
+      "auto_generated" : true,
+      "module_name" : "QBusiness",
+      "service_id" : "QBusiness"
+   },
+   "qconnect" : {
+      "auto_generated" : true,
+      "module_name" : "QConnect",
+      "service_id" : "QConnect"
+   },
+   "quicksight" : {
+      "auto_generated" : true,
+      "module_name" : "QuickSight",
+      "service_id" : "QuickSight"
+   },
+   "ram" : {
+      "auto_generated" : true,
+      "module_name" : "RAM",
+      "service_id" : "RAM"
+   },
+   "rbin" : {
+      "auto_generated" : false,
+      "module_name" : "RBIN",
+      "service_id" : "rbin"
+   },
+   "rds" : {
+      "auto_generated" : true,
+      "module_name" : "RDS",
+      "service_id" : "RDS"
+   },
+   "rds-data" : {
+      "auto_generated" : true,
+      "module_name" : "RDSData",
+      "service_id" : "RDS Data"
+   },
+   "redshift" : {
+      "auto_generated" : true,
+      "module_name" : "Redshift",
+      "service_id" : "Redshift"
+   },
+   "redshift-data" : {
+      "auto_generated" : true,
+      "module_name" : "RedshiftData",
+      "service_id" : "Redshift Data"
+   },
+   "redshift-serverless" : {
+      "auto_generated" : true,
+      "module_name" : "RedshiftServerless",
+      "service_id" : "Redshift Serverless"
+   },
+   "rekognition" : {
+      "auto_generated" : true,
+      "module_name" : "Rekognition",
+      "service_id" : "Rekognition"
+   },
+   "repostspace" : {
+      "auto_generated" : false,
+      "module_name" : "RePostPrivate",
+      "service_id" : "repostspace"
+   },
+   "resiliencehub" : {
+      "auto_generated" : false,
+      "module_name" : "ResilienceHub",
+      "service_id" : "resiliencehub"
+   },
+   "resiliencehubv2" : {
+      "auto_generated" : false,
+      "module_name" : "ResilienceHubV2",
+      "service_id" : "resiliencehubv2"
+   },
+   "resource-explorer-2" : {
+      "auto_generated" : true,
+      "module_name" : "ResourceExplorer2",
+      "service_id" : "Resource Explorer 2"
+   },
+   "resource-groups" : {
+      "auto_generated" : true,
+      "module_name" : "ResourceGroups",
+      "service_id" : "Resource Groups"
+   },
+   "resourcegroupstaggingapi" : {
+      "auto_generated" : true,
+      "module_name" : "ResourceGroupsTaggingAPI",
+      "service_id" : "Resource Groups Tagging API"
+   },
+   "rolesanywhere" : {
+      "auto_generated" : true,
+      "module_name" : "RolesAnywhere",
+      "service_id" : "RolesAnywhere"
+   },
+   "route53" : {
+      "auto_generated" : true,
+      "module_name" : "Route53",
+      "service_id" : "Route 53"
+   },
+   "route53-recovery-cluster" : {
+      "auto_generated" : true,
+      "module_name" : "Route53RecoveryCluster",
+      "service_id" : "Route53 Recovery Cluster"
+   },
+   "route53-recovery-control-config" : {
+      "auto_generated" : true,
+      "module_name" : "Route53RecoveryControlConfig",
+      "service_id" : "Route53 Recovery Control Config"
+   },
+   "route53-recovery-readiness" : {
+      "auto_generated" : true,
+      "module_name" : "Route53RecoveryReadiness",
+      "service_id" : "Route53 Recovery Readiness"
+   },
+   "route53domains" : {
+      "auto_generated" : true,
+      "module_name" : "Route53Domains",
+      "service_id" : "Route 53 Domains"
+   },
+   "route53globalresolver" : {
+      "auto_generated" : true,
+      "module_name" : "Route53GlobalResolver",
+      "service_id" : "Route53GlobalResolver"
+   },
+   "route53profiles" : {
+      "auto_generated" : true,
+      "module_name" : "Route53Profiles",
+      "service_id" : "Route53Profiles"
+   },
+   "route53resolver" : {
+      "auto_generated" : true,
+      "module_name" : "Route53Resolver",
+      "service_id" : "Route53Resolver"
+   },
+   "rtbfabric" : {
+      "auto_generated" : true,
+      "module_name" : "RTBFabric",
+      "service_id" : "RTBFabric"
+   },
+   "rum" : {
+      "auto_generated" : true,
+      "module_name" : "RUM",
+      "service_id" : "RUM"
+   },
+   "s3" : {
+      "auto_generated" : true,
+      "module_name" : "S3",
+      "service_id" : "S3"
+   },
+   "s3control" : {
+      "auto_generated" : true,
+      "module_name" : "S3Control",
+      "service_id" : "S3 Control"
+   },
+   "s3files" : {
+      "auto_generated" : true,
+      "module_name" : "S3Files",
+      "service_id" : "S3Files"
+   },
+   "s3outposts" : {
+      "auto_generated" : true,
+      "module_name" : "S3Outposts",
+      "service_id" : "S3Outposts"
+   },
+   "s3tables" : {
+      "auto_generated" : true,
+      "module_name" : "S3Tables",
+      "service_id" : "S3Tables"
+   },
+   "s3vectors" : {
+      "auto_generated" : true,
+      "module_name" : "S3Vectors",
+      "service_id" : "S3Vectors"
+   },
+   "sagemaker" : {
+      "auto_generated" : true,
+      "module_name" : "SageMaker",
+      "service_id" : "SageMaker"
+   },
+   "sagemaker-a2i-runtime" : {
+      "auto_generated" : true,
+      "module_name" : "SageMakerA2IRuntime",
+      "service_id" : "SageMaker A2I Runtime"
+   },
+   "sagemaker-edge" : {
+      "auto_generated" : false,
+      "module_name" : "SageMakerEdge",
+      "service_id" : "Sagemaker Edge"
+   },
+   "sagemaker-featurestore-runtime" : {
+      "auto_generated" : true,
+      "module_name" : "SageMakerFeatureStoreRuntime",
+      "service_id" : "SageMaker FeatureStore Runtime"
+   },
+   "sagemaker-geospatial" : {
+      "auto_generated" : true,
+      "module_name" : "SageMakerGeospatial",
+      "service_id" : "SageMaker Geospatial"
+   },
+   "sagemaker-metrics" : {
+      "auto_generated" : true,
+      "module_name" : "SageMakerMetrics",
+      "service_id" : "SageMaker Metrics"
+   },
+   "sagemaker-runtime" : {
+      "auto_generated" : true,
+      "module_name" : "SageMakerRuntime",
+      "service_id" : "SageMaker Runtime"
+   },
+   "sagemakerjobruntime" : {
+      "auto_generated" : false,
+      "module_name" : "SageMakerJobRuntime",
+      "service_id" : "SagemakerJobRuntime"
+   },
+   "savingsplans" : {
+      "auto_generated" : false,
+      "module_name" : "SavingsPlans",
+      "service_id" : "savingsplans"
+   },
+   "scheduler" : {
+      "auto_generated" : true,
+      "module_name" : "Scheduler",
+      "service_id" : "Scheduler"
+   },
+   "schemas" : {
+      "auto_generated" : true,
+      "module_name" : "Schemas",
+      "service_id" : "schemas"
+   },
+   "sdb" : {
+      "auto_generated" : true,
+      "module_name" : "SimpleDB",
+      "service_id" : "SimpleDB"
+   },
+   "secretsmanager" : {
+      "auto_generated" : true,
+      "module_name" : "SecretsManager",
+      "service_id" : "Secrets Manager"
+   },
+   "security-ir" : {
+      "auto_generated" : true,
+      "module_name" : "SecurityIR",
+      "service_id" : "Security IR"
+   },
+   "securityagent" : {
+      "auto_generated" : true,
+      "module_name" : "SecurityAgent",
+      "service_id" : "SecurityAgent"
+   },
+   "securityhub" : {
+      "auto_generated" : true,
+      "module_name" : "SecurityHub",
+      "service_id" : "SecurityHub"
+   },
+   "securitylake" : {
+      "auto_generated" : true,
+      "module_name" : "SecurityLake",
+      "service_id" : "SecurityLake"
+   },
+   "serverlessrepo" : {
+      "auto_generated" : true,
+      "module_name" : "ServerlessApplicationRepository",
+      "service_id" : "ServerlessApplicationRepository"
+   },
+   "service-quotas" : {
+      "auto_generated" : true,
+      "module_name" : "ServiceQuotas",
+      "service_id" : "Service Quotas"
+   },
+   "servicecatalog" : {
+      "auto_generated" : true,
+      "module_name" : "ServiceCatalog",
+      "service_id" : "Service Catalog"
+   },
+   "servicecatalog-appregistry" : {
+      "auto_generated" : true,
+      "module_name" : "ServiceCatalogAppRegistry",
+      "service_id" : "Service Catalog AppRegistry"
+   },
+   "servicediscovery" : {
+      "auto_generated" : true,
+      "module_name" : "ServiceDiscovery",
+      "service_id" : "ServiceDiscovery"
+   },
+   "ses" : {
+      "auto_generated" : true,
+      "module_name" : "SES",
+      "service_id" : "SES"
+   },
+   "sesv2" : {
+      "auto_generated" : true,
+      "module_name" : "SESv2",
+      "service_id" : "SESv2"
+   },
+   "shield" : {
+      "auto_generated" : true,
+      "module_name" : "Shield",
+      "service_id" : "Shield"
+   },
+   "signer" : {
+      "auto_generated" : true,
+      "module_name" : "Signer",
+      "service_id" : "signer"
+   },
+   "signer-data" : {
+      "auto_generated" : true,
+      "module_name" : "SignerData",
+      "service_id" : "Signer Data"
+   },
+   "signin" : {
+      "auto_generated" : true,
+      "module_name" : "Signin",
+      "service_id" : "Signin"
+   },
+   "simpledbv2" : {
+      "auto_generated" : true,
+      "module_name" : "SimpleDBv2",
+      "service_id" : "SimpleDBv2"
+   },
+   "simspaceweaver" : {
+      "auto_generated" : true,
+      "module_name" : "SimSpaceWeaver",
+      "service_id" : "SimSpaceWeaver"
+   },
+   "sms-voice" : {
+      "auto_generated" : false,
+      "module_name" : "SMSVoice",
+      "service_id" : "Pinpoint SMS Voice"
+   },
+   "snow-device-management" : {
+      "auto_generated" : true,
+      "module_name" : "SnowDeviceManagement",
+      "service_id" : "Snow Device Management"
+   },
+   "snowball" : {
+      "auto_generated" : true,
+      "module_name" : "Snowball",
+      "service_id" : "Snowball"
+   },
+   "sns" : {
+      "auto_generated" : true,
+      "module_name" : "SNS",
+      "service_id" : "SNS"
+   },
+   "socialmessaging" : {
+      "auto_generated" : true,
+      "module_name" : "SocialMessaging",
+      "service_id" : "SocialMessaging"
+   },
+   "sqs" : {
+      "auto_generated" : true,
+      "module_name" : "SQS",
+      "service_id" : "SQS"
+   },
+   "ssm" : {
+      "auto_generated" : true,
+      "module_name" : "SSM",
+      "service_id" : "SSM"
+   },
+   "ssm-contacts" : {
+      "auto_generated" : true,
+      "module_name" : "SSMContacts",
+      "service_id" : "SSM Contacts"
+   },
+   "ssm-guiconnect" : {
+      "auto_generated" : true,
+      "module_name" : "SSMGuiConnect",
+      "service_id" : "SSM GuiConnect"
+   },
+   "ssm-incidents" : {
+      "auto_generated" : true,
+      "module_name" : "SSMIncidents",
+      "service_id" : "SSM Incidents"
+   },
+   "ssm-quicksetup" : {
+      "auto_generated" : true,
+      "module_name" : "SSMQuickSetup",
+      "service_id" : "SSM QuickSetup"
+   },
+   "ssm-sap" : {
+      "auto_generated" : false,
+      "module_name" : "SSMSap",
+      "service_id" : "Ssm Sap"
+   },
+   "sso" : {
+      "auto_generated" : true,
+      "module_name" : "SSO",
+      "service_id" : "SSO"
+   },
+   "sso-admin" : {
+      "auto_generated" : true,
+      "module_name" : "SSOAdmin",
+      "service_id" : "SSO Admin"
+   },
+   "sso-oidc" : {
+      "auto_generated" : true,
+      "module_name" : "SSOOIDC",
+      "service_id" : "SSO OIDC"
+   },
+   "stepfunctions" : {
+      "auto_generated" : true,
+      "module_name" : "SFN",
+      "service_id" : "SFN"
+   },
+   "storagegateway" : {
+      "auto_generated" : true,
+      "module_name" : "StorageGateway",
+      "service_id" : "Storage Gateway"
+   },
+   "sts" : {
+      "auto_generated" : true,
+      "module_name" : "STS",
+      "service_id" : "STS"
+   },
+   "supplychain" : {
+      "auto_generated" : true,
+      "module_name" : "SupplyChain",
+      "service_id" : "SupplyChain"
+   },
+   "support" : {
+      "auto_generated" : true,
+      "module_name" : "Support",
+      "service_id" : "Support"
+   },
+   "support-app" : {
+      "auto_generated" : true,
+      "module_name" : "SupportApp",
+      "service_id" : "Support App"
+   },
+   "supportauthz" : {
+      "auto_generated" : true,
+      "module_name" : "SupportAuthZ"
+   },
+   "sustainability" : {
+      "auto_generated" : true,
+      "module_name" : "Sustainability",
+      "service_id" : "Sustainability"
+   },
+   "swf" : {
+      "auto_generated" : true,
+      "module_name" : "SWF",
+      "service_id" : "SWF"
+   },
+   "synthetics" : {
+      "auto_generated" : true,
+      "module_name" : "Synthetics",
+      "service_id" : "synthetics"
+   },
+   "taxsettings" : {
+      "auto_generated" : true,
+      "module_name" : "TaxSettings",
+      "service_id" : "TaxSettings"
+   },
+   "textract" : {
+      "auto_generated" : true,
+      "module_name" : "Textract",
+      "service_id" : "Textract"
+   },
+   "timestream-influxdb" : {
+      "auto_generated" : true,
+      "module_name" : "TimestreamInfluxDB",
+      "service_id" : "Timestream InfluxDB"
+   },
+   "timestream-query" : {
+      "auto_generated" : true,
+      "module_name" : "TimestreamQuery",
+      "service_id" : "Timestream Query"
+   },
+   "timestream-write" : {
+      "auto_generated" : true,
+      "module_name" : "TimestreamWrite",
+      "service_id" : "Timestream Write"
+   },
+   "tnb" : {
+      "auto_generated" : true,
+      "module_name" : "TNB",
+      "service_id" : "tnb"
+   },
+   "transcribe" : {
+      "auto_generated" : true,
+      "module_name" : "Transcribe",
+      "service_id" : "Transcribe"
+   },
+   "transfer" : {
+      "auto_generated" : true,
+      "module_name" : "Transfer",
+      "service_id" : "Transfer"
+   },
+   "translate" : {
+      "auto_generated" : true,
+      "module_name" : "Translate",
+      "service_id" : "Translate"
+   },
+   "trustedadvisor" : {
+      "auto_generated" : true,
+      "module_name" : "TrustedAdvisor",
+      "service_id" : "TrustedAdvisor"
+   },
+   "uxc" : {
+      "auto_generated" : true,
+      "module_name" : "UXC",
+      "service_id" : "uxc"
+   },
+   "verifiedpermissions" : {
+      "auto_generated" : true,
+      "module_name" : "VerifiedPermissions",
+      "service_id" : "VerifiedPermissions"
+   },
+   "voice-id" : {
+      "auto_generated" : true,
+      "module_name" : "VoiceID",
+      "service_id" : "Voice ID"
+   },
+   "vpc-lattice" : {
+      "auto_generated" : true,
+      "module_name" : "VPCLattice",
+      "service_id" : "VPC Lattice"
+   },
+   "waf" : {
+      "auto_generated" : true,
+      "module_name" : "WAF",
+      "service_id" : "WAF"
+   },
+   "waf-regional" : {
+      "auto_generated" : true,
+      "module_name" : "WAFRegional",
+      "service_id" : "WAF Regional"
+   },
+   "wafv2" : {
+      "auto_generated" : true,
+      "module_name" : "WAFV2",
+      "service_id" : "WAFV2"
+   },
+   "wellarchitected" : {
+      "auto_generated" : true,
+      "module_name" : "WellArchitected",
+      "service_id" : "WellArchitected"
+   },
+   "wickr" : {
+      "auto_generated" : true,
+      "module_name" : "Wickr",
+      "service_id" : "Wickr"
+   },
+   "wisdom" : {
+      "auto_generated" : true,
+      "module_name" : "Wisdom",
+      "service_id" : "Wisdom"
+   },
+   "workdocs" : {
+      "auto_generated" : true,
+      "module_name" : "WorkDocs",
+      "service_id" : "WorkDocs"
+   },
+   "workmail" : {
+      "auto_generated" : true,
+      "module_name" : "WorkMail",
+      "service_id" : "WorkMail"
+   },
+   "workmailmessageflow" : {
+      "auto_generated" : true,
+      "module_name" : "WorkMailMessageFlow",
+      "service_id" : "WorkMailMessageFlow"
+   },
+   "workspaces" : {
+      "auto_generated" : true,
+      "module_name" : "WorkSpaces",
+      "service_id" : "WorkSpaces"
+   },
+   "workspaces-instances" : {
+      "auto_generated" : true,
+      "module_name" : "WorkspacesInstances",
+      "service_id" : "Workspaces Instances"
+   },
+   "workspaces-thin-client" : {
+      "auto_generated" : true,
+      "module_name" : "WorkSpacesThinClient",
+      "service_id" : "WorkSpaces Thin Client"
+   },
+   "workspaces-web" : {
+      "auto_generated" : true,
+      "module_name" : "WorkSpacesWeb",
+      "service_id" : "WorkSpaces Web"
+   },
+   "xray" : {
+      "auto_generated" : true,
+      "module_name" : "XRay",
+      "service_id" : "XRay"
+   }
+}

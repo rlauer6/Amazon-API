@@ -3,7 +3,6 @@ package Amazon::API::Provenance;
 use strict;
 use warnings;
 
-use Amazon::API::Botocore;
 use CLI::Simple::Constants qw(:booleans);
 use CLI::Simple::Utils qw(slurp_json choose slurp);
 use Cwd qw(getcwd);
@@ -17,6 +16,7 @@ use Role::Tiny::With;
 with 'Amazon::API::Provenance::Role::KMS';
 with 'Amazon::API::Provenance::Role::SSM';
 with 'Amazon::API::Provenance::Role::Records';
+with 'Amazon::API::Role::Botocore';
 
 use Readonly;
 Readonly::Scalar our $KEY_ALIAS         => 'alias/provenance-signing';
@@ -51,7 +51,7 @@ sub cmd_create_provenance {
 
   my $service_meta = $services->{$service};
 
-  my $module_name = Amazon::API::Botocore::_module_name($service);
+  my $module_name = $self->module_name($service);
 
   my $basename = $module_name;
   $basename =~ s/::/-/xsmg;

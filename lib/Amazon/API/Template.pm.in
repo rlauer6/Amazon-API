@@ -3,21 +3,22 @@ package Amazon::API::Template;
 use strict;
 use warnings;
 
+use Amazon::API::Constants qw(:chars :booleans);
+use CLI::Simple::Utils qw(slurp);
+use Pod::HTML2Pod;
+use English qw(-no_match_vars);
+use Fcntl qw(:seek);
+use Data::Dumper;
+use Scalar::Util qw(openhandle);
+
+use Readonly;
+Readonly::Scalar my $TEMPLATE_DELIMITER => q{@};
+
 use parent qw( Exporter );
 
 our @EXPORT_OK = qw( to_template_var fetch_template render_template html2pod );
 
 our %EXPORT_TAGS = ( all => [@EXPORT_OK] );
-
-use Amazon::API::Constants qw(:chars :booleans);
-
-use Readonly;
-use Pod::HTML2Pod;
-use English qw(-no_match_vars);
-use Fcntl qw(:seek);
-use Data::Dumper;
-
-Readonly::Scalar my $TEMPLATE_DELIMITER => q{@};
 
 ########################################################################
 sub to_template_var {
@@ -34,16 +35,11 @@ sub fetch_template {
 ########################################################################
   my ( $fh, $template_start ) = @_;
 
-  seek $fh, $template_start, SEEK_SET;
-
-  my $template;
-
-  {
-    local $RS = undef;
-    $template = <$fh>;
+  if ( defined $template_start ) {
+    seek $fh, $template_start, SEEK_SET;
   }
 
-  return $template;
+  return slurp($fh);
 }
 
 ########################################################################

@@ -1,9 +1,0 @@
-#!/usr/bin/env bash
-#-*- mode: sh; -*-
-# modulino invocation
-
-MODULINO_WRAPPER=amazon-api
-MODULE_NAME=Amazon::API::Botocore
-MODULE_PATH=$(MODULE_PATH="${MODULE_NAME//:://}.pm" perl -M$MODULE_NAME -e 'print $INC{$ENV{MODULE_PATH}};')
-
-MODULINO_WRAPPER=$MODULINO_WRAPPER perl $MODULE_PATH "$@"

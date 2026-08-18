@@ -1,0 +1,299 @@
+package Amazon::API::CLI;
+
+use strict;
+use warnings;
+
+use Amazon::API::BuildInfo;
+use Carp;
+use CLI::Simple::Utils qw(slurp slurp_json);
+use CLI::Simple::Constants qw(:booleans :chars);
+use Cwd qw(getcwd);
+use Data::Dumper;
+use English qw(-no_match_vars);
+use File::ShareDir qw(dist_file);
+use File::Path qw(make_path);
+use charnames qw(:full);
+
+use Role::Tiny::With;
+with 'Amazon::API::Role::Botocore';
+with 'Amazon::API::Role::Services';
+with 'Amazon::API::Role::ModuleNames';
+
+__PACKAGE__->use_log4perl( level => 'info' );
+
+use parent qw(CLI::Simple);
+
+caller or exit __PACKAGE__->main();
+
+########################################################################
+sub cmd_describe_service {
+########################################################################
+  my ($self) = @_;
+
+  my ($service) = $self->get_args;
+
+  croak "ERROR: usage: describe-service service-name\n"
+    if !$service;
+
+  my $boto_services = $self->fetch_boto_services;
+
+  my @services = $service eq 'all' ? keys %{$boto_services} : $service;
+
+  my $description = $self->get_service_descriptions( $boto_services, @services );
+
+  print JSON->new->pretty->encode($description);
+
+  return $TRUE;
+}
+
+########################################################################
+sub cmd_get_module_name {
+########################################################################
+  my ($self) = @_;
+
+  my ($service) = $self->get_args;
+
+  croak "ERROR: usage: module-name service-name\n"
+    if !$service;
+
+  my $module_name = $self->module_name($service);
+
+  # just returns module name suffixe
+  ($module_name) = $module_name =~ /::([^:]+)$/xsm;
+
+  print {*STDOUT} $module_name;
+
+  return $SUCCESS;
+}
+
+########################################################################
+sub cmd_create_stub {
+########################################################################
+  my ($self) = @_;
+
+  my ($service) = $self->get_args;
+  $service //= $self->get_service;
+
+  die "ERROR: usage: create-stub service-name\n"
+    if !$service;
+
+  $service = lc $service;
+
+  my $module_name = $self->get_module_name // $self->module_name($service);
+
+  my $output_path = $self->get_output_path // getcwd;
+
+  my ($module_suffix) = $module_name =~ /(?:::)?([^:]+)$/xsm;
+
+  $self->create_stub(
+    output_path => $output_path,
+    service     => $service,
+    module_name => $module_suffix,
+  );
+
+  return $SUCCESS;
+}
+
+########################################################################
+sub main {
+########################################################################
+
+  my %commands = (
+    'create-stub'         => \&cmd_create_stub,
+    'describe-service'    => \&cmd_describe_service,
+    'create-module-names' => \&cmd_create_module_names,
+    'create-services'     => \&cmd_create_services,
+    'get-module-name'     => \&cmd_get_module_name,
+    'list-services'       => \&cmd_list_services,
+  );
+
+  my $default_options = {
+    pod         => $TRUE,
+    pager       => $TRUE,
+    output_path => getcwd,
+    metadata    => $TRUE,
+    format      => 'json',
+  };
+
+  my @option_specs = qw(
+    botocore-path|b=s
+    file|f=s
+    filter=s
+    format=s
+    help|h
+    limit|l=i
+    module-name|m=s
+    output-path|o=s
+    metadata!
+    pager|P!
+    service|s=s
+  );
+
+  my $cli = __PACKAGE__->new(
+    commands        => \%commands,
+    option_specs    => \@option_specs,
+    default_options => $default_options,
+    extra_options   => [qw()],
+    abbreviations   => $TRUE,
+  );
+
+  return $cli->run();
+}
+
+1;
+
+__END__
+
+=pod
+
+=encoding utf8
+
+=head1 NAME
+
+amzn-api - create and describe Amazon::API service classes from
+Botocore 
+
+=head1 SYNOPSIS
+
+ amzn-api [options] command [arguments]
+
+ # generate an Amazon::API::S3 stub in the current directory
+ amzn-api -b /path/to/botocore create-stub s3
+
+ # dump a service's normalized Botocore description as JSON
+ amzn-api describe-service sqs
+
+ # list every service, or one field of one service
+ amzn-api list-services
+ amzn-api list-services sqs --filter protocol
+
+=head1 DESCRIPTION
+
+C<Amazon::API::CLI> is the modulino behind the C<amzn-api> command. It
+provides the commands used to generate C<Amazon::API> service classes
+from a Botocore checkout and to inspect the Botocore metadata those
+classes are built from. It composes L<Amazon::API::Role::Botocore>,
+L<Amazon::API::Role::Services>, and L<Amazon::API::Role::ModuleNames>.
+
+Most users will only use C<create-stub> (and occasionally
+C<describe-service> or C<list-services>) to produce and inspect a
+service class. The C<create-module-names> and C<create-services>
+commands are maintenance commands used to regenerate the metadata
+artifacts that C<Amazon::API> ships (C<botocore-metadata.api> and
+C<services.api>); they 
+are not part of ordinary use.
+
+=head2 Commands
+
+=over 4
+
+=item create-stub [I<service>]
+
+Generate an C<Amazon::API::E<lt>ServiceE<gt>> stub -- the C<.pm> plus
+its C<.api.gz> metadata image -- into C<--output-path> (default: the
+current directory). The service may be given as an argument or via
+C<--service>; the module suffix is taken from C<--module-name> or
+resolved automatically from the service name. This is the command that
+produces a
+usable service class.
+
+ amzn-api -b /path/to/botocore create-stub s3
+
+=item describe-service I<service>|all
+
+Print the normalized Botocore description for a service as pretty
+JSON, 
+or for every service when given C<all>.
+
+=item list-services [I<service>]
+
+Print the discovered service index as JSON. Given a service name,
+print just that entry -- or a single field of it when C<--filter> is
+supplied.  Services are read from C<--botocore-path>, or, when none is
+given, from 
+the C<botocore-metadata.api> registry shipped with C<Amazon::API>.
+
+=item get-module-name I<service>
+
+Print the C<Amazon::API> module suffix for a service, e.g. C<sts>
+yields 
+C<STS>.
+
+=item create-module-names
+
+I<Maintenance command.> Rebuild the C<botocore-metadata.api> registry
+(the service-to-module-name and metadata map) into
+C<--output-path>. Used to 
+regenerate the metadata C<Amazon::API> ships; not normally run by end
+users.
+
+=item create-services
+
+I<Maintenance command.> Rebuild the C<services.api> registry
+(per-service protocol and content-type data) into C<--output-path> --
+file name from C<--file>, default F<services.api>, with C<--limit>
+capping the number processed. Like C<create-module-names>, this
+produces a shipped artifact 
+and is not part of ordinary use.
+
+=back
+
+=head2 Options
+
+=over 4
+
+=item -b, --botocore-path=I<path>
+
+Path to the Botocore checkout (the directory containing C<botocore/>).
+Defaults to the current directory or C<$BOTOCORE_PATH>.
+
+=item -o, --output-path=I<path>
+
+Directory for generated output. Defaults to the current directory.
+
+=item -s, --service=I<name>
+
+Service name, as an alternative to passing it as an argument.
+
+=item -m, --module-name=I<name>
+
+Override the C<Amazon::API> module suffix used by C<create-stub>.
+
+=item --filter=I<key>
+
+With C<list-services>, print only the named field of a service entry
+rather than the whole entry.
+
+=item -f, --file=I<name>
+
+Output file name for C<create-services> (default F<services.api>).
+
+=item -l, --limit=I<n>
+
+Cap the number of services processed by C<create-services>.
+
+=item --metadata, --nometadata
+
+Include decoded service metadata when building a registry. On by
+default. 
+
+=item -P, --pager, --nopager
+
+Page long output. On by default.
+
+=item -h, --help
+
+Print usage.
+
+=back
+
+=head1 LICENSE AND COPYRIGHT
+
+This module is free software. It may be used, redistributed and/or
+modified under the same terms as Perl itself.
+
+=head1 SEE ALSO
+
+L<Amazon::API>, L<Amazon::API::Help>, L<Amazon::API::Role::Botocore>
+
+=cut

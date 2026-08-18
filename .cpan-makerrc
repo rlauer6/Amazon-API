@@ -1,0 +1,34 @@
+# CPAN::Maker configuration file
+# Use with: cpan-maker-bootstrapper --config /path/to/this/file
+# Or set:   export CPAN_MAKER_CONFIG=/path/to/this/file
+
+[user]
+    # your full name
+    name   = Amazon-API
+    # your email address
+    email  = rclauer@gmail.com
+    # your GitHub username (used to construct repository URLs)
+    github = rlauer6
+
+[cpan-maker]
+    # directory in which new projects are created
+    # basedir = ~/git
+
+    # generate GitHub resource URLs (currently only 'github' supported)
+    # resources = github
+
+    # enable perl -wc syntax checking in pattern rules
+    # syntax-checking = on
+
+    # path to perltidy configuration file (enables tidy checking)
+    # perltidyrc = ~/.perltidyrc
+
+    # path to perlcritic configuration file (enables critic checking)
+    # perlcriticrc = ~/.perlcriticrc
+
+    # shell command that prints your LLM API key (recommended)
+    # llm-api-key-helper = cat ~/.ssh/anthropic-api-key
+
+    # maximum number of output tokens
+    # max-tokens = 4096
+

@@ -1,0 +1,643 @@
+package Amazon::API::Role::Botocore;
+
+use strict;
+use warnings;
+
+use Amazon::API::Constants qw($PADDING);
+use Amazon::API::Template qw(fetch_template to_template_var render_template);
+
+use Carp;
+use CLI::Simple::Utils qw(slurp choose);
+use CLI::Simple::Constants qw(:booleans :chars);
+use Cwd qw(getcwd abs_path);
+use Data::Dumper;
+use Digest::SHA qw(sha256_hex);
+use English qw(-no_match_vars);
+use File::Basename qw(basename dirname);
+use File::ShareDir qw(dist_file);
+use File::Path qw(make_path);
+use List::MoreUtils qw(first_index);
+use JSON;
+use File::Find;
+use Storable qw(nstore dclone retrieve);
+
+use Role::Tiny;
+
+use Readonly;
+Readonly::Scalar our $REQUEST_CLASS_TEMPLATE => 'Amazon::API::Botocore::Shape::%s::%sRequest';
+Readonly::Scalar our $BOTO_PATH_OFFSET       => 3;
+
+########################################################################
+sub get_service_descriptions {
+########################################################################
+  my ( $self, $boto_services, @services ) = @_;
+
+  my @descriptions;
+
+  if ( !@services ) {
+    @services = sort keys %{$boto_services};
+  }
+
+  my $botocore_path = $self->_check_botocore_path( $ENV{BOTOCORE_PATH} // $self->get_botocore_path );
+
+  foreach my $s ( map {lc} @services ) {
+
+    croak "ERROR: no such service: $s\n"
+      if !$boto_services->{$s};
+
+    my $service_path = sprintf '%s/botocore/data/%s/%s', $botocore_path, $s, $boto_services->{$s}->{date};
+
+    my $service_file    = "$service_path/service-2.json";
+    my $paginators_file = "$service_path/paginators-1.json";
+
+    my $paginators = eval { return $self->fetch_paginators($paginators_file); };
+
+    my $service_description = $self->fetch_service_description($service_file);
+
+    if ( $service_description->{operations} ) {
+      my $operations = $service_description->{operations};
+      my $shapes     = $service_description->{shapes};
+      my $metadata   = $service_description->{metadata};
+
+      my $service_name = $metadata->{signingName} || $metadata->{endpointPrefix};
+
+      my $botocore_data = {
+        $s => {
+          actions             => [ keys %{$operations} ],
+          documentation       => $service_description->{documentation},
+          endpoint_prefix     => $metadata->{endpointPrefix},
+          json_version        => $metadata->{jsonVersion},
+          metadata            => $metadata,
+          metadata_keys       => [ keys %{$metadata} ],
+          operations          => $operations,
+          paginators          => $paginators,
+          protocol            => $metadata->{protocol},
+          service_name        => $service_name,
+          shapes              => $shapes,
+          target_prefix       => $metadata->{targetPrefix},
+          version             => $boto_services->{$s}->{date},
+          service_2_digest    => sha256_hex( slurp($service_file) ),
+          paginators_1_digest => -e $paginators_file ? sha256_hex( slurp($paginators_file) ) : 'no paginators',
+        }
+      };
+
+      push @descriptions, $botocore_data;
+    }
+  }
+
+  return \@descriptions;
+}
+
+########################################################################
+sub fetch_json_file {
+########################################################################
+  my ( $self, $path ) = @_;
+
+  my $json;
+
+  open my $fh, '<', $path
+    or croak 'ERROR: could not open ' . $path;
+
+  {
+    local $RS = undef;
+    $json = JSON->new->utf8->decode(<$fh>);
+  }
+
+  close $fh
+    or croak 'ERROR: could not close ' . $path;
+
+  return $json;
+}
+
+########################################################################
+sub fetch_service_description { goto &fetch_json_file; }
+sub fetch_paginators          { goto &fetch_json_file; }
+########################################################################
+
+# collect paths to most recent service-2.json files for all AWS services
+########################################################################
+sub find_latest_services {
+########################################################################
+  my ( $self, $boto_services ) = @_;
+
+  my $file = $_;
+
+  my $dir = $File::Find::name;
+
+  return
+    if $dir !~ qr/botocore\N{SOLIDUS}botocore/xsm;
+
+  return
+    if $file !~ qr/service\N{HYPHEN-MINUS}2\N{FULL STOP}json/xsm;
+
+  my (@path) = split /\N{SOLIDUS}/xsm, $dir;
+
+  my $boto_path = first_index {/botocore/xsm} @path;
+
+  # this should not happen...
+  croak 'no botocore in path ' . $dir
+    if $boto_path < 0;
+
+  $boto_path += $BOTO_PATH_OFFSET;
+
+  my ( $service, $date ) = @path[ $boto_path, $boto_path + 1, ];
+
+  $boto_services->{$service}->{date} = $boto_services->{$service}->{date} // $EMPTY;
+
+  if ( $date gt $boto_services->{$service}->{date} ) {
+    $boto_services->{$service} = {
+      date => $date,
+      path => \@path,
+      file => join q{/},
+      @path,
+    };
+  }
+
+  return $file;
+}
+
+########################################################################
+sub create_stub {
+########################################################################
+  my ( $self, %args ) = @_;
+
+  my ( $output_path, $module_name, $service ) = @args{qw(output_path module_name service)};
+
+  croak "ERROR: usage: create_stub(output_path => path, module_name => module-name, service => service\n"
+    if !$output_path || !$module_name || !$service;
+
+  my $boto_services = $self->fetch_boto_services;
+
+  my $path = sprintf '%s/Amazon/API', $output_path;
+
+  croak "ERROR: could not create $path"
+    if !-d $path && !make_path($path);
+
+  my $package_name = sprintf 'Amazon::API::%s', $module_name;
+
+  my $description = $self->get_service_descriptions( $boto_services, $service );
+
+  my $parameters = $description->[0]->{$service};
+
+  $parameters->{package_name} = $package_name;
+
+  # bake the parsed request URI into each operation so the runtime
+  # (Amazon::API rest-json/rest-xml dispatch) can build request URIs
+  # from the stored metadata without re-parsing. Must run before the
+  # metadata is stored below.
+  foreach my $op ( values %{ $parameters->{operations} } ) {
+    my $http = $op->{http};
+
+    if ( $http && $http->{requestUri} ) {
+      my ( $request_uri_tpl, $args ) = $self->_parse_request_uri( $http->{requestUri} );
+
+      $http->{parsed_request_uri} = {
+        request_uri_tpl => $request_uri_tpl,
+        parameters      => $args,
+      };
+    }
+  }
+
+  # documentation is developer-facing only (rendered on demand by
+  # Amazon::API::Help) and is never read by the runtime. Strip it from
+  # the shipped metadata.
+  my $operations = $self->_strip_documentation( dclone $parameters->{operations} );
+  my $shapes     = $self->_strip_documentation( dclone $parameters->{shapes} );
+
+  local $Storable::canonical = $TRUE;
+
+  my $meta;
+
+  nstore(
+    { metadata            => $parameters->{metadata},
+      operations          => $operations,
+      shapes              => $shapes,
+      paginators          => $parameters->{paginators},
+      service_2_digest    => $parameters->{service_2_digest},
+      paginators_1_digest => $parameters->{paginators_1_digest},
+    },
+    \$meta
+  );
+
+  require IO::Compress::Gzip;
+  IO::Compress::Gzip::gzip( \$meta, sprintf '%s/Amazon/API/%s.api.gz', $output_path, $module_name );
+
+  my @actions = @{ $parameters->{actions} };
+
+  $parameters->{actions} = $PADDING . join "\n    ", sort @actions;
+
+  $parameters->{service}
+    = $parameters->{service_name} || $parameters->{endpoint_prefix};
+
+  if ( $parameters->{protocol} eq 'query' ) {
+    $parameters->{content_type} = 'application/x-www-form-urlencoded';
+  }
+
+  if ( $parameters->{protocol} eq 'json' ) {
+    $parameters->{content_type} = 'application/x-amz-json-' . $parameters->{json_version};
+  }
+
+  # for rest-json protocol we need a method and and a query uri in
+  # addition to the payload
+  if ( $parameters->{protocol} eq 'rest-json' ) {
+    $parameters->{content_type} = 'application/json';
+  }
+
+  my $version = $parameters->{version};
+  $parameters->{service_version} = $version;
+
+  $version =~ s/[-]/./xsmg;
+  $parameters->{version} = $version;
+
+  my @template_vars = qw(
+    content_type
+    endpoint_prefix
+    package_name
+    paginators_1_digest
+    protocol
+    service
+    service_2_digest
+    target_prefix
+    version
+    service_version
+  );
+
+  foreach my $var (@template_vars) {
+    $parameters->{ to_template_var($var) } = $parameters->{$var};
+  }
+
+  my ($stub) = grep { defined $_ && -e $_ } ( '../share/stub.pm.tmpl', eval { dist_file( 'Amazon-API', 'stub.pm.tmpl' ) } );
+
+  croak sprintf "ERROR: could not find stub.pm.tmpl (%s)\n", getcwd
+    if !$stub;
+
+  my $module = $self->render_stub(
+    template   => fetch_template($stub),
+    parameters => $parameters,
+  );
+
+  my $file = sprintf '%s/%s.pm', $path, $module_name;
+
+  if ( -e $file ) {
+    rename $file, "$file.bak";
+  }
+
+  open my $fh, '>', $file
+    or croak "ERROR: could not open $file for writing\n$OS_ERROR";
+
+  print {$fh} $module;
+
+  close $fh
+    or croak 'ERROR: could not close file';
+
+  return;
+}
+
+########################################################################
+sub fetch_boto_services {
+########################################################################
+  my ( $self, $want_metadata ) = @_;
+
+  my $botocore_path = $ENV{BOTOCORE_PATH} // $self->get_botocore_path;
+
+  croak "ERROR: No Botocore path found\n"
+    if !$botocore_path || !-d "$botocore_path/botocore";
+
+  my %boto_services;
+
+  find( { wanted => sub { $self->find_latest_services( \%boto_services ); }, follow => $TRUE }, "$botocore_path/botocore" );
+
+  croak 'ERROR: no services found in path ' . $botocore_path
+    if !keys %boto_services;
+
+  return \%boto_services
+    if !$want_metadata;
+
+  foreach my $service ( keys %boto_services ) {
+    my $service_2_file = $boto_services{$service}->{file};
+    my $service_2      = slurp($service_2_file);
+
+    $boto_services{$service}->{metadata} = decode_json($service_2);
+
+    # calculate digests for service, paginators
+    $boto_services{$service}->{service_2_digest} = sha256_hex($service_2);
+
+    my $paginators_file = dirname($service_2_file) . '/paginators-1.json';
+    if ( -e $paginators_file ) {
+      $boto_services{$service}->{paginators_1_digest} = sha256_hex( slurp($paginators_file) );
+    }
+    else {
+      $boto_services{$service}->{paginators_1_digest} = 'no paginators';
+    }
+  }
+
+  return \%boto_services;
+}
+
+########################################################################
+sub _check_botocore_path {
+########################################################################
+  my ( $self, $path ) = @_;
+
+  croak "ERROR: no botocore path\n"
+    if !$path;
+
+  my $abs_path = abs_path($path);
+
+  my $candidate = choose {
+
+    return $abs_path
+      if -d "$abs_path/botocore/data";
+
+    return "../$abs_path"
+      if -d "../$abs_path/botocore/data";
+
+    return getcwd
+      if -d sprintf '%s/botocore/data', getcwd;
+
+    return q{};
+  };
+
+  # final sanity check
+  croak sprintf "ERROR: %s is not a botocore repository\n", $abs_path
+    if !$candidate || !-d $candidate || !-r sprintf '%s/botocore/data/ec2/2016-11-15/service-2.json', $candidate;
+
+  return $candidate;
+}
+
+{
+  my $botocore_metadata;
+
+  ######################################################################
+  sub _botocore_metadata {
+    ######################################################################
+    my ($self) = @_;
+
+    return $botocore_metadata
+      if $botocore_metadata;
+
+    my @candidates = ( 'botocore-metadata.api', eval { dist_file( 'Amazon-API', 'botocore-metadata.api' ) } );
+
+    my ($metadata_file) = grep { defined $_ && -e $_ } @candidates;
+
+    croak "ERROR: could not find 'botocore-metadata.api'\n"
+      if !$metadata_file;
+
+    $botocore_metadata = retrieve($metadata_file);
+
+    return $botocore_metadata;
+  }
+}
+
+########################################################################
+sub module_name {
+########################################################################
+  my ( $self, $service ) = @_;
+
+  return $self->_botocore_metadata->{$service}{metadata}{metadata}{perl_module_name};
+}
+
+########################################################################
+sub _strip_documentation {
+########################################################################
+  my ( $self, $data ) = @_;
+
+  my $ref = ref $data;
+
+  if ( $ref eq 'HASH' ) {
+    delete $data->{documentation};
+    _strip_documentation($_) for values %{$data};
+  }
+  elsif ( $ref eq 'ARRAY' ) {
+    _strip_documentation($_) for @{$data};
+  }
+
+  return $data;
+}
+########################################################################
+sub render_stub {
+########################################################################
+  my ( $self, %args ) = @_;
+
+  my $template   = $args{template};
+  my $parameters = $args{parameters};
+
+  $parameters->{ to_template_var('git_sha') } = $Amazon::API::BuildInfo::GIT_SHA;
+
+  return render_template( $template, $parameters );
+}
+
+########################################################################
+sub _parse_request_uri {
+########################################################################
+  my ( $self, $uri ) = @_;
+
+  my ( $path, $query_string ) = split /\N{QUESTION MARK}/xsm, $uri;
+
+  my @path_parts = split /\N{SOLIDUS}/xsm, $path;
+
+  my @path_args;
+
+  foreach my $idx ( 1 .. $#path_parts + 1 ) {
+    if ( $path_parts[$idx] && $path_parts[$idx] =~ /^[{](.*)[}]$/xsm ) {
+      push @path_args, ucfirst $1;
+      $path_parts[$idx] = '%s';
+    }
+  }
+
+  my $request_uri = join $SLASH, @path_parts;
+
+  if ($query_string) {
+    $request_uri .= $QUESTION_MARK . $query_string;
+  }
+
+  return ( $request_uri || $uri, \@path_args );
+}
+
+1;
+
+__END__
+
+=pod
+
+=encoding utf8
+
+=head1 NAME
+
+Amazon::API::Role::Botocore - role providing an interface to Botocore metadata
+
+=head1 SYNOPSIS
+
+ package Amazon::API::MyGenerator;
+
+ use Role::Tiny::With;
+ with 'Amazon::API::Role::Botocore';
+
+ sub get_botocore_path { return $ENV{BOTOCORE_PATH} }
+
+ ...
+
+ my $self     = __PACKAGE__->new;
+ my $services = $self->fetch_boto_services;
+
+ $self->create_stub(
+   output_path => '/tmp/build',
+   module_name => 'STS',
+   service     => 'sts',
+ );
+
+=head1 DESCRIPTION
+
+C<Amazon::API::Role::Botocore> is a L<Role::Tiny> role that encapsulates
+the Botocore-facing operations used to generate C<Amazon::API> service
+classes. It enumerates the AWS services present in a Botocore checkout,
+loads and normalizes their C<service-2.json> / C<paginators-1.json>
+definitions, generates a runtime service stub together with a serialized
+metadata image, and resolves a Botocore service name to the C<Amazon::API>
+package that implements it.
+
+It reads two sources: the raw Botocore checkout (located via
+L</get_botocore_path> or C<$ENV{BOTOCORE_PATH}>) and, for name resolution,
+the pre-built C<botocore-metadata.api> registry shipped with
+C<Amazon::API>. The role is consumed via C<with> by the C<amzn-api>
+generator and by the Amazon::API build factory; a consuming class need
+only supply L</get_botocore_path>.
+
+=head1 REQUIRED METHODS
+
+The composing class must provide:
+
+=over 4
+
+=item get_botocore_path
+
+Returns the filesystem path to the Botocore checkout (the directory
+containing the C<botocore/> subtree). C<$ENV{BOTOCORE_PATH}> takes
+precedence over this method when it is set.
+
+=back
+
+=head1 METHODS AND SUBROUTINES
+
+=head2 create_stub
+
+ $self->create_stub(
+   output_path => $path,
+   module_name => $module_name,
+   service     => $service,
+ );
+
+Generates an C<Amazon::API::E<lt>module_nameE<gt>> service stub from the
+Botocore service definition and writes two files beneath
+C<$output_path/Amazon/API/>:
+
+=over 4
+
+=item * C<E<lt>module_nameE<gt>.pm> — the runtime stub (package
+C<Amazon::API::E<lt>module_nameE<gt>>), rendered from F<stub.pm.tmpl>.
+
+=item * C<E<lt>module_nameE<gt>.api.gz> — a gzipped, canonical L<Storable>
+image of the service metadata (metadata, operations, shapes, paginators
+and their SHA-256 digests) that the runtime loads instead of re-parsing
+Botocore at run time.
+
+=back
+
+Before serializing, each operation's C<requestUri> is parsed and baked in
+as C<parsed_request_uri> so the runtime can build request URIs from the
+stored metadata, and developer-facing C<documentation> is stripped from
+operations and shapes (it is never read by the runtime; POD is rendered
+separately by L<Amazon::API::Help>). The content type is derived from the
+Botocore C<protocol> (C<query>, C<json>, C<rest-json>), and the service
+version is taken from the API date (C<service_version> keeps the raw
+C<YYYY-MM-DD>; C<version> is the dotted C<YYYY.MM.DD> form used for the
+distribution).
+
+Arguments are passed as key/value pairs; all three are required.
+
+=over 4
+
+=item output_path
+
+Base output directory. The C<Amazon/API/> tree is created beneath it if
+it does not exist.
+
+=item module_name
+
+The package suffix, e.g. C<S3> yields C<Amazon::API::S3>.
+
+=item service
+
+The Botocore service key, e.g. C<s3>, C<dynamodb>.
+
+=back
+
+An existing C<.pm> is renamed to C<.pm.bak> before writing. Returns
+nothing; croaks on a missing argument, an uncreatable output path, or a
+missing F<stub.pm.tmpl>.
+
+=head2 fetch_boto_services
+
+ my $services = $self->fetch_boto_services;
+ my $services = $self->fetch_boto_services($want_metadata);
+
+Walks the Botocore tree (C<$ENV{BOTOCORE_PATH}> or
+C<< $self->get_botocore_path >>, under C<botocore/>) and returns a hash
+reference of every AWS service, keyed by service name, resolved to its
+most recent API version. Each value contains at least the service's API
+C<date> and the path to its C<file> (its F<service-2.json>).
+
+If C<$want_metadata> is true, each entry is additionally populated with
+its decoded C<metadata> and the C<service_2_digest> /
+C<paginators_1_digest> SHA-256 digests.
+
+Croaks if no Botocore path is found, the C<botocore/> subdirectory is
+absent, or no services are discovered.
+
+=head2 get_service_descriptions
+
+ my $descriptions = $self->get_service_descriptions($boto_services);
+ my $descriptions = $self->get_service_descriptions($boto_services, @services);
+
+Given the service index returned by L</fetch_boto_services>, loads and
+normalizes the full Botocore description for the named C<@services> (or
+every service in C<$boto_services> if none are named). Returns an array
+reference of single-key hash references, one per service, each of the
+form C<< { $service =E<gt> \%description } >>.
+
+Each C<%description> collects the service's C<actions>, C<operations>,
+C<shapes>, C<paginators>, C<metadata> (plus C<endpoint_prefix>,
+C<json_version>, C<protocol>, C<service_name>, C<target_prefix>),
+C<version> (the API date), and the C<service_2_digest> /
+C<paginators_1_digest> SHA-256 digests. Services whose definition has no
+C<operations> are skipped.
+
+Croaks if a named service is not present in C<$boto_services>.
+
+=head2 module_name
+
+ my $package = $self->module_name($service);
+
+Resolves a Botocore service name to the C<Amazon::API> package that
+implements it, read from the pre-built C<botocore-metadata.api> registry.
+For example:
+
+ my $package = $self->module_name('sts');   # Amazon::API::STS
+
+Croaks if C<botocore-metadata.api> cannot be located.
+
+=head1 SEE ALSO
+
+L<Amazon::API>, L<Amazon::API::Help>, L<Amazon::API::Botocore::Shape::Utils>,
+L<Role::Tiny>
+
+=head1 LICENSE AND COPYRIGHT
+
+This module is free software. It may be used, redistributed, and/or
+modified under the same terms as Perl itself.
+
+=head1 AUTHOR
+
+Rob Lauer - <rlauer@treasurersbriefcase.com>
+
+=cut

@@ -44,11 +44,7 @@ CARTON         := $(shell command -v carton)
 CPAN_INSTALLER ?= $(firstword $(CPM) $(CARTON))
 
 ifeq ($(CPAN_INSTALLER),)
-  $(warning no cpm/carton found — set SYNTAX_CHECKING=off if builds fail to find dependencies)
-else
-  ifndef MAKE_RESTARTS
-    $(info using $(CPAN_INSTALLER) to install dependencies in ./local)
-  endif
+  $(warning no cpm/carton found -- set SYNTAX_CHECKING=off if builds fail to find dependencies)
 endif
 
 ifeq ($(MD_UTILS),)
@@ -62,8 +58,8 @@ GIT_NAME     ?= $(shell $(GIT) config --global user.name 2>/dev/null || echo "An
 GIT_EMAIL    ?= $(shell $(GIT) config --global user.email 2>/dev/null || echo "anonymouse@example.org")
 GITHUB_USER  ?= $(shell $(GIT) config --global user.github 2>/dev/null || echo "anonymouse")
 
-GIT_SHA      := $(shell git rev-parse HEAD 2>/dev/null || echo 'unknown' )
-GIT_DIRTY    := $(shell git describe --always --dirty --abbrev=40 2>/dev/null || 'unknown')
+GIT_SHA      := $(shell $(GIT) rev-parse HEAD 2>/dev/null || echo 'unknown' )
+GIT_DIRTY    := $(shell $(GIT) describe --always --dirty --abbrev=40 2>/dev/null || echo 'unknown')
 
 CONFIG_READER = CPAN::Maker::Bootstrapper::ConfigReader
 
@@ -133,6 +129,7 @@ TEMPLATE_VARS += \
     GIT_EMAIL \
     GIT_USER \
     GIT_NAME \
+    MIN_PERL_VERSION \
     PROJECT_NAME \
 
 -include .includes/local.mk
@@ -288,13 +285,15 @@ buildspec.yml.tmpl:
 	chmod 0644 $@
 
 buildspec.yml: | buildspec.yml.tmpl
+	$(call gen-vars-file,buildspec.yml.tmpl.vars)
 	$(NO_ECHO)buildspec=$$(mktemp); \
+	trap 'rm -f buildspec.yml.tmpl.vars' EXIT; \
 	specfile="$(PROJECT_NAME)"; \
 	specfile="$${specfile,,}.yml"; \
 	if [[ -e "$$specfile" ]]; then \
 	  share_files="    - $$specfile\n"; \
 	fi; \
-	SHARE_FILES="$$share_files" $(BOOTSTRAPPER) resolve-vars buildspec.yml.tmpl "$$template_vars" > $$buildspec; \
+	SHARE_FILES="$$share_files" $(BOOTSTRAPPER) resolve-vars buildspec.yml.tmpl > $$buildspec; \
 	if test -e resources.yml; then \
 	  cat resources.yml >> $$buildspec; \
 	  rm resources.yml; \

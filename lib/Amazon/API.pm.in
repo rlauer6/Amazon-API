@@ -7,8 +7,6 @@ use warnings;
 
 use 5.010;
 
-use parent qw( Exporter Class::Accessor::Fast);
-
 use Amazon::API::Error;
 use Amazon::API::Signature4;
 use Amazon::API::Constants qw( :all );
@@ -30,7 +28,6 @@ use English qw( -no_match_vars);
 use HTTP::Request;
 use JSON qw(decode_json encode_json);
 use List::Util qw(any all pairs none);
-use Module::Load;
 use Readonly;
 use Scalar::Util qw( reftype blessed );
 use URL::Encode qw(url_encode);
@@ -50,6 +47,7 @@ __PACKAGE__->mk_accessors(
     action
     api
     api_methods
+    api_protocol
     botocore_metadata
     botocore_operations
     botocore_request_headers
@@ -91,7 +89,9 @@ __PACKAGE__->mk_accessors(
   )
 );
 
-our $VERSION = '@PACKAGE_VERSION@'; ## no critic (RequireInterpolationOfMetachars)
+our $VERSION   = '@PACKAGE_VERSION@'; ## no critic (RequireInterpolationOfMetachars)
+our $GIT_SHA   = '@GIT_SHA@';
+our $GIT_DIRTY = '@GIT_DIRTY@';
 
 our $VALIDATE_MODE = 'strict';
 
@@ -99,488 +99,16 @@ our @EXPORT_OK = qw(
   create_urlencoded_content
   get_api_service
   param_n
-  paginator
   service
 );
 
-=pod
-
-=begin 'ignore'
-
-The service categories were extracted from Botocore project:
-
-grep -ri '"protocol":"' botocore/botocore/data/* | grep 'xml' | \
-  cut -f 8 -d '/' | sort -u > xml.services
-
-grep -ri '"protocol":"' botocore/botocore/data/* | grep 'json' | \
-  cut -f 8 -d '/' | sort -u > json.services
-
-grep -ri '"protocol":"' botocore/botocore/data/* | grep 'query' | \
-  cut -f 8 -d '/' | sort -u > query.services
-
-These service categories are used to deduce content type for
-parameters sent to methods for these APIs when Botocore metadata was
-not used to create an API class. Content-Type can however be
-overridden when invoking APIs if we guess wrong.
-
- rest-json => application/x-amz-1.1
- rest-xml  => application/xml
- query     => application/x-www-form-urlencoded
-
-=end 'ignore'
-
-=cut
-
-our %SERVICE_CONTENT_TYPES = (
-  ec2         => 'application/x-www-form-urlencoded',
-  query       => 'application/x-www-form-urlencoded',
-  'rest-json' => 'application/json',
-  json        => 'application/x-amz-json',
-  'rest-xml'  => 'application/xml',
-);
-
-our %API_TYPES = (
-  query => [
-    qw(
-      autoscaling
-      cloudformation
-      cloudsearch
-      cloudwatch
-      docdb
-      ec2
-      elasticache
-      elasticbeanstalk
-      elb
-      elbv2
-      iam
-      importexport
-      neptune
-      rds
-      redshift
-      sdb
-      ses
-      sns
-      sts
-    )
-  ],
-  xml => [
-    qw(
-      cloudfront
-      route53
-      s3
-      s3control
-    )
-  ],
-  json => [
-    qw(
-      accessanalyzer
-      account
-      acm
-      acm-pca
-      amp
-      amplify
-      amplifybackend
-      amplifyuibuilder
-      apigateway
-      apigatewaymanagementapi
-      apigatewayv2
-      appconfig
-      appconfigdata
-      appfabric
-      appflow
-      appintegrations
-      application-autoscaling
-      application-insights
-      application-signals
-      applicationcostprofiler
-      appmesh
-      apprunner
-      appstream
-      appsync
-      apptest
-      arc-zonal-shift
-      artifact
-      athena
-      auditmanager
-      autoscaling-plans
-      b2bi
-      backup
-      backup-gateway
-      backupsearch
-      batch
-      bcm-data-exports
-      bcm-pricing-calculator
-      bedrock
-      bedrock-agent
-      bedrock-agent-runtime
-      bedrock-data-automation
-      bedrock-data-automation-runtime
-      bedrock-runtime
-      billing
-      billingconductor
-      braket
-      budgets
-      ce
-      chatbot
-      chime
-      chime-sdk-identity
-      chime-sdk-media-pipelines
-      chime-sdk-meetings
-      chime-sdk-messaging
-      chime-sdk-voice
-      cleanrooms
-      cleanroomsml
-      cloud9
-      cloudcontrol
-      clouddirectory
-      cloudfront-keyvaluestore
-      cloudhsm
-      cloudhsmv2
-      cloudsearchdomain
-      cloudtrail
-      cloudtrail-data
-      codeartifact
-      codebuild
-      codecatalyst
-      codecommit
-      codeconnections
-      codedeploy
-      codeguru-reviewer
-      codeguru-security
-      codeguruprofiler
-      codepipeline
-      codestar-connections
-      codestar-notifications
-      cognito-identity
-      cognito-idp
-      cognito-sync
-      comprehend
-      comprehendmedical
-      compute-optimizer
-      config
-      connect
-      connect-contact-lens
-      connectcampaigns
-      connectcampaignsv2
-      connectcases
-      connectparticipant
-      controlcatalog
-      controltower
-      cost-optimization-hub
-      cur
-      customer-profiles
-      databrew
-      dataexchange
-      datapipeline
-      datasync
-      datazone
-      dax
-      deadline
-      detective
-      devicefarm
-      devops-guru
-      directconnect
-      discovery
-      dlm
-      dms
-      docdb-elastic
-      drs
-      ds
-      ds-data
-      dsql
-      dynamodb
-      dynamodbstreams
-      ebs
-      ec2-instance-connect
-      ecr
-      ecr-public
-      ecs
-      efs
-      eks
-      eks-auth
-      elastictranscoder
-      emr
-      emr-containers
-      emr-serverless
-      entityresolution
-      es
-      events
-      evidently
-      finspace
-      finspace-data
-      firehose
-      fis
-      fms
-      forecast
-      forecastquery
-      frauddetector
-      freetier
-      fsx
-      gamelift
-      gameliftstreams
-      geo-maps
-      geo-places
-      geo-routes
-      glacier
-      globalaccelerator
-      glue
-      grafana
-      greengrass
-      greengrassv2
-      groundstation
-      guardduty
-      health
-      healthlake
-      identitystore
-      imagebuilder
-      inspector
-      inspector-scan
-      inspector2
-      internetmonitor
-      invoicing
-      iot
-      iot-data
-      iot-jobs-data
-      iot-managed-integrations
-      iotanalytics
-      iotdeviceadvisor
-      iotevents
-      iotevents-data
-      iotfleethub
-      iotfleetwise
-      iotsecuretunneling
-      iotsitewise
-      iotthingsgraph
-      iottwinmaker
-      iotwireless
-      ivs
-      ivs-realtime
-      ivschat
-      kafka
-      kafkaconnect
-      kendra
-      kendra-ranking
-      keyspaces
-      kinesis
-      kinesis-video-archived-media
-      kinesis-video-media
-      kinesis-video-signaling
-      kinesis-video-webrtc-storage
-      kinesisanalytics
-      kinesisanalyticsv2
-      kinesisvideo
-      kms
-      lakeformation
-      lambda
-      launch-wizard
-      lex-models
-      lex-runtime
-      lexv2-models
-      lexv2-runtime
-      license-manager
-      license-manager-linux-subscriptions
-      license-manager-user-subscriptions
-      lightsail
-      location
-      logs
-      lookoutequipment
-      lookoutmetrics
-      lookoutvision
-      m2
-      machinelearning
-      macie2
-      mailmanager
-      managedblockchain
-      managedblockchain-query
-      marketplace-agreement
-      marketplace-catalog
-      marketplace-deployment
-      marketplace-entitlement
-      marketplace-reporting
-      marketplacecommerceanalytics
-      mediaconnect
-      mediaconvert
-      medialive
-      mediapackage
-      mediapackage-vod
-      mediapackagev2
-      mediastore
-      mediastore-data
-      mediatailor
-      medical-imaging
-      memorydb
-      meteringmarketplace
-      mgh
-      mgn
-      migration-hub-refactor-spaces
-      migrationhub-config
-      migrationhuborchestrator
-      migrationhubstrategy
-      mq
-      mturk
-      mwaa
-      neptune-graph
-      neptunedata
-      network-firewall
-      networkflowmonitor
-      networkmanager
-      networkmonitor
-      notifications
-      notificationscontacts
-      oam
-      observabilityadmin
-      omics
-      opensearch
-      opensearchserverless
-      opsworks
-      opsworkscm
-      organizations
-      osis
-      outposts
-      panorama
-      partnercentral-selling
-      payment-cryptography
-      payment-cryptography-data
-      pca-connector-ad
-      pca-connector-scep
-      pcs
-      personalize
-      personalize-events
-      personalize-runtime
-      pi
-      pinpoint
-      pinpoint-email
-      pinpoint-sms-voice
-      pinpoint-sms-voice-v2
-      pipes
-      polly
-      pricing
-      privatenetworks
-      proton
-      qapps
-      qbusiness
-      qconnect
-      qldb
-      qldb-session
-      quicksight
-      ram
-      rbin
-      rds-data
-      redshift-data
-      redshift-serverless
-      rekognition
-      repostspace
-      resiliencehub
-      resource-explorer-2
-      resource-groups
-      resourcegroupstaggingapi
-      robomaker
-      rolesanywhere
-      route53-recovery-cluster
-      route53-recovery-control-config
-      route53-recovery-readiness
-      route53domains
-      route53profiles
-      route53resolver
-      rum
-      s3outposts
-      s3tables
-      sagemaker
-      sagemaker-a2i-runtime
-      sagemaker-edge
-      sagemaker-featurestore-runtime
-      sagemaker-geospatial
-      sagemaker-metrics
-      sagemaker-runtime
-      savingsplans
-      scheduler
-      schemas
-      secretsmanager
-      security-ir
-      securityhub
-      securitylake
-      serverlessrepo
-      service-quotas
-      servicecatalog
-      servicecatalog-appregistry
-      servicediscovery
-      sesv2
-      shield
-      signer
-      simspaceweaver
-      sms
-      sms-voice
-      snow-device-management
-      snowball
-      socialmessaging
-      sqs
-      ssm
-      ssm-contacts
-      ssm-incidents
-      ssm-quicksetup
-      ssm-sap
-      sso
-      sso-admin
-      sso-oidc
-      stepfunctions
-      storagegateway
-      supplychain
-      support
-      support-app
-      swf
-      synthetics
-      taxsettings
-      textract
-      timestream-influxdb
-      timestream-query
-      timestream-write
-      tnb
-      transcribe
-      transfer
-      translate
-      trustedadvisor
-      verifiedpermissions
-      voice-id
-      vpc-lattice
-      waf
-      waf-regional
-      wafv2
-      wellarchitected
-      wisdom
-      workdocs
-      workmail
-      workmailmessageflow
-      workspaces
-      workspaces-thin-client
-      workspaces-web
-      xray
-    )
-  ],
-);
-
-our @GLOBAL_SERVICES = qw(
-  cloudfront
-  iam
-  importexport
-  route53
-  s3
-  savingsplans
-  sts
-);
+use parent qw( Exporter Class::Accessor::Fast);
 
 our @REQUIRED_KEYS = qw( aws_access_key_id aws_secret_access_key );
 
 ########################################################################
 sub choose(&) { return $_[0]->(); } ## no critic
 ########################################################################
-
-########################################################################
-sub paginator {
-########################################################################
-  require Amazon::API::Botocore;
-
-  return Amazon::API::Botocore::paginator(@_);
-}
 
 ########################################################################
 sub new {
@@ -643,7 +171,7 @@ sub set_log_level {
   $logger->level($log4perl_level);
 
   if ( ref($logger) =~ /Log4perl/xsm ) {
-    Log::Log4perl->get_logger('Amazon::API::Botocore')->level($log4perl_level);
+    Log::Log4perl->get_logger->level($log4perl_level);
   }
 
   return $self;
@@ -664,11 +192,11 @@ sub service { goto &get_api_service; }
 ########################################################################
 sub get_api_service {
 ########################################################################
-  my ( $service_name, @args ) = @_;
+  my ( $service, @args ) = @_;
 
-  $service_name = create_module_name $service_name;
+  require Amazon::API::Role::Botocore;
 
-  my $class = sprintf 'Amazon::API::%s', $service_name;
+  my $class = Amazon::API::Role::Botocore->module_name($service);
 
   require_class $class;
 
@@ -979,12 +507,12 @@ sub find_content_type {
       $content_type = sprintf '%s-%s', $content_type, $metadata->{jsonVersion};
     }
 
-    $self->set_protocol($protocol);
+    $self->set_api_protocol($protocol);
 
     return $content_type;
   }
 
-  return $EMPTY;
+  croak "ERROR: no support content type found\n";
 }
 
 ########################################################################
@@ -1415,10 +943,10 @@ sub serialize_content {
     }
   );
 
-  my $protocol = eval { $self->get_botocore_metadata->{protocol} } // $EMPTY;
+  my $protocol = $self->get_api_protocol // $EMPTY;
 
   # if the API is a query API, url encode parameters
-  if ( $protocol eq 'query' || any { $_ eq lc $self->get_service } @{ $API_TYPES{query} } ) {
+  if ( $protocol eq 'query' ) {
     $parameters //= [];
     $content = create_urlencoded_content( $parameters, $action, $version );
   }
@@ -1792,7 +1320,6 @@ sub submit {
     $request->header( 'X-Amz-Security-Token' => $token );
   }
 
-  # TODO: global end-points
   my $region = $self->get_region;
 
   # sign the request
@@ -2026,21 +1553,7 @@ sub _set_content_type {
 ########################################################################
   my ($self) = @_;
 
-  my $service = $self->get_service;
-
-  # default content-type
-  my $content_type = $self->get_content_type;
-
-  return 'application/x-www-form-urlencoded'
-    if any { $_ eq $service } @{ $API_TYPES{query} };
-
-  return 'application/x-amz-json-1.1'
-    if any { $_ eq $service } @{ $API_TYPES{json} };
-
-  return 'application/xml'
-    if any { $_ eq $service } @{ $API_TYPES{xml} };
-
-  return $content_type;
+  return $self->get_content_type;
 }
 
 ########################################################################
@@ -2230,11 +1743,8 @@ sub _create_service_url {
   else {
     my $endpoint = $self->get_endpoint_prefix || $service;
 
-    if ( any { $_ eq $service } @GLOBAL_SERVICES ) {
-      $url = sprintf $GLOBAL_URL_FMT, $self->get_protocol, $endpoint;
-    }
     # this could probably be an else since we always set region to a default
-    elsif ( $self->get_region ) {
+    if ( $self->get_region ) {
       $url = sprintf $REGIONAL_URL_FMT, $self->get_protocol, $endpoint, $self->get_region;
     }
     else {
@@ -2370,6 +1880,8 @@ __END__
 
 =pod
 
+=encoding utf8
+
 =head1 NAME
 
 Amazon::API - A generic base class for AWS Services
@@ -2387,7 +1899,7 @@ https://github.com/rlauer6/perl-Amazon-API/actions/workflows/build.yml/badge.svg
 
 =begin 'markdown'
 
-[![amazon-api](https://github.com/rlauer6/perl-Amazon-API/actions/workflows/build.yml/badge.svg)](https://github.com/rlauer6/perl-Amazon-API/actions/workflows/build.yml)
+[![Amazon-API](https://github.com/rlauer6/perl-Amazon-API/actions/workflows/build.yml/badge.svg)](https://github.com/rlauer6/perl-Amazon-API/actions/workflows/build.yml)
 
 =end 'markdown'
 
@@ -2396,14 +1908,14 @@ parent class, but can be used directly. This package can also
 generates stubs for Amazon APIs using the Botocore project
 metadata. (See L</BOTOCORE SUPPORT>).
 
-I<The typical use of this is API is through the classes you build with
-the included tool (F<amazon-api>). The tool leverages the Botocore
+The typical use of this API is through the classes you build with
+the included tool (F<amzn-api>). The tool leverages the Botocore
 project's metadata to build classes that are specific to each API (and
-are documented in the perlish way). Using C<Amazon::API> directly may
-not work in all circumstances unless you are very familiar with the
-API you are calling. If you decide to take the L<Luddite
-approaches|/Take the Luddite approach>, read the documentation
-carefully before using C<Amazon::API>.>
+are documented via the separate L<Amazon::API::Help> tool). Using
+C<Amazon::API> directly may not work in all circumstances unless you
+are very familiar with the API you are calling. If you decide to take
+the L<Luddite approaches|/Take the Luddite approach>, read the
+documentation carefully before using C<Amazon::API>.
 
 =over 5
 
@@ -2414,7 +1926,7 @@ directly to call AWS services.
 L<Amazon::CloudWatchEvents|https://github.com/rlauer6/perl-Amazon-CloudWatchEvents/blob/master/src/main/perl/lib/Amazon/CloudWatchEvents.pm.in>
 for an example of how to use this module as a parent class.
 
-=item * See C<amazon-api -h> for information regarding
+=item * See C<amzn-api -h> for information regarding
 how to automatically create Perl classes for AWS services using
 Botocore metadata.
 
@@ -2430,11 +1942,11 @@ installing and invoking a subset of services you might want to
 consider C<Amazon::API>.
 
 Think of this class as a DIY kit for installing B<only> the APIs and methods you
-need for your AWS project.  Using the included C<amazon-api> utility
+need for your AWS project.  Using the included C<amzn-api> utility
 you can also roll your own complete Amazon API classes that
 include support for serializing requests and responses based on
 metadata provided by the Botocore project. The classes you create with
-C<amazon-api> include full documentation as pod. (See L</BOTOCORE
+C<amzn-api> include full documentation as pod. (See L</BOTOCORE
 SUPPORT> for more details).
 
 =over 5
@@ -2452,7 +1964,7 @@ Botocore metadata, but it works a heckuva lot better with it.
 
 =back
 
-You can use L<Amazon::API> in 3 different ways:
+You can use L<Amazon::API> in several different ways:
 
 =head2 Take the Luddite approach
 
@@ -2503,33 +2015,111 @@ You can use L<Amazon::API> in 3 different ways:
 
  print {*STDERR} Dumper($sqs->ListQueues);
 
-=head2 Use the Botocore metadata to build classes for you
+=head2 Amazon::API DarkPAN
 
- amazon-api -s sqs create-stubs
- amazon-api -s sqs create-shapes
+Many of the Amazon API classes have already been pre-built and are
+available in the Amazon::API DarkPAN:
 
- perl -I . -MData::Dumper -MAmazon::API:SQS -e 'print Dumper(Amazon::API::SQS->new->ListQueues);'
+ https://cpan.openbedrock.net/orepan2
+
+Each module that is generated and installed in the DarkPAN is
+signed. You can find instructions on how to verify the signatures by
+visiting
+L<https://cpan.openbedrock.net/signature/index.html|https://cpan.openbedrock.net/signature/index.html>.
+
+Modules not currently available can be requested on the same site.
+
+=head2 Build from the cloned L<https://github.com/rlauer6/Amazon-API.git> project
+
+You can build a complete CPAN distribution for an API class by cloning
+the project from GitHub. Follow the instructions below.
+
+=over 4
+
+=item 1. If you need to...install these dependencies
+
+  ca-certificates
+  curl
+  gcc
+  git
+  libexpat-dev
+  libssl-dev
+  libzip-dev
+  make
+  perl
+
+=item 2. Install cpm
+
+ curl -fsSL https://raw.githubusercontent.com/skaji/cpm/main/cpm | perl - install -g App::cpm
+
+=item 3. Clone the Amazon-API repository
+
+  git clone --depth 1 --branch master https://github.com/rlauer6/Amazon-API.git
+
+=item 4. Install some build dependencies
+
+  cd Amazon-API
+  cat build-requires | cpm install -
+
+=item 5. Clone the Botocore repository
+
+  git clone --depth 1 --branch master https://github.com/boto/botocore.git
+
+=item 6. Export some environment variables
+
+  export PERL5LIB=/Amazon-API/local/lib/perl5
+  export PATH=/Amazon-API/local/bin:$PATH
+  export CPAN_MAKER_CONFIG=$(pwd)/.cpan-makerrc
+
+=item 7. Build the project
+
+  make
+
+=item 8. Build a service
+
+  make cpan-dist SERVICE=sts
+
+=item 9. Test the service
+
+  cpm install Amazon-STS*.tar.gz
+
+  AWS_PROFILE=sandbox perl -I local/lib/perl5 -MData::Dumper -MAmazon::API::STS \
+    -e 'print Dumper(Amazon::API::STS->new->GetCallerIdentity);'
+
+=back
+
+=head2 Use the Botocore metadata to build classes locally
+
+In order to use Botocore metadata you must clone the Botocore
+repository yourself and point the utility at the repository
+directory. 
+
+B<This method is recommended solely for experimenting with
+the C<Amazon::API>>.
 
 =over 5
 
-I<NOTE:> In order to use Botocore metadata you must clone the Botocore
-repository and point the utility to the repo.
+=item * Install C<Amazon::API>
 
-Clone the Botocore project from GitHub:
+ cpanm Amazon::API
 
- mkdir ~/git
- cd git
- git clone https://github.com/boto/botocore.git
+=item * Clone the Botocore project from GitHub:
 
-Generate stub classes for the API and shapes:
+ git clone --depth=1 --branch=master https://github.com/boto/botocore.git
 
- amazon-api -b ~/git/botocore -s sqs -o ~/lib/perl5 create-stubs
- amazon-api -b ~/git/botocore -s sqs -o ~/lib/perl5 create-shapes
+=item * Generate a stub class for the API:
 
- perldoc Amazon::API::SQS
+ amzn-api -b botocore -s sts -o lib create-stub
 
-See L<Amazon::API::Botocore::Pod> for more details regarding building
-stubs and shapes.
+=item * Test
+
+Make sure your credentials are available before running your
+test. Credentials in your environment, instance profile or your
+credentials file will be found automatically by
+L<Amazon::Credentials>.
+
+  AWS_PROFILE=sandbox perl -I lib -MAmazon::API::STS -MData::Dumper \
+    -e 'Amazon::STS::API::STS->new->GetCallerIdentity;'
 
 =back
 
@@ -2563,25 +2153,21 @@ lightweight way possible.
 
 Using L<Amazon::API> as a generic, lightweight module, naturally does
 not provide nuanced support for individual AWS services. To use this
-class in that manner for invoking the AWS APIs, you need to be very
-familiar with the specific API requirements and responses and be
+class in that manner for invoking the AWS APIs, you need to be B<very
+familiar with the specific API requirements and responses> and be
 willng to invest time reading the documentation on Amazon's website.
 The payoff is that you can probably use this class to call I<any> AWS
 API without installing a large number of dependencies.
 
 If you don't mind a few extra dependencies and overhead, you should
-generate the stub APIs and support classes using the C<amazon-api>
-utility. The stubs and shapes produced by the utility will serialize
-and deserialize requests and responses correctly by using the Botocore
-metadata. Botocore metadata provides the necessary information to
-create classes that can successfully invoke all of the Amazon APIs.
+generate the stub APIs using the C<amzn-api> utility or download the
+classes from the L</Amazon::API>. The stubs produced by the utility
+will serialize and deserialize requests and responses correctly by
+using the Botocore metadata. Botocore metadata provides the necessary
+information to create classes that can successfully invoke all of the
+Amazon APIs.
 
-A good example of creating a quick and dirty interface to CloudWatch
-Events can be found here:
-
-L<Amazon::CloudWatchEvents|https://github.com/rlauer6/perl-Amazon-CloudWatchEvents/blob/master/src/main/perl/lib/Amazon/CloudWatchEvents.pm.in>
-
-And invoking some of the APIs can be as easy as:
+Invoking some of the APIs I<can potentially be> as easy as:
 
   Amazon::API->new(
     service     => 'sqs',
@@ -2589,11 +2175,14 @@ And invoking some of the APIs can be as easy as:
   }
   )->invoke_api('ListQueues');
 
+...again using this approach requires that you understand the
+requirements for each API.
+
 =head1 BOTOCORE SUPPORT
 
 Using Botocore metadata and the utilities in this project, you can
 create Perl classes that simplify calling AWS services.  After
-creating service classes and shape objects from the Botocore metadata
+creating service classes from the Botocore metadata
 calling AWS APIs will look something like this:
 
  use Amazon::API::SQS;
@@ -2601,17 +2190,17 @@ calling AWS APIs will look something like this:
  my $sqs = Amazon::API::SQS->new;
  my $rsp = $sqs->ListQueues();
 
-The L<Amazon::API::Botocore> module augments L<Amazon::API> by using
+The L<Amazon::API::Role::Botocore> module augments L<Amazon::API> by using
 Botocore metadata for determining how to call individual services and
-serialize parameters passed to its API methods. A utility (C<amazon-api>)
-is provided that can generate Perl classes for all AWS services using
+serialize parameters passed to its API methods. C<amzn-api>
+is provided to help you generate Perl classes for all AWS services using
 the Botocore metadata.
 
 Perl classes that represent AWS data structures (aka shapes) that are
-passed to or returned from services can also be generated. These
-classes allow you to call all of the API methods for a given service
-using simple Perl objects that are serialized correctly for a specific
-method.
+passed to or returned from services are generated dynamically from the
+Botocore metadata. These classes allow you to call all of the API
+methods for a given service using simple Perl objects that are
+serialized correctly for a specific method.
 
 Service classes are subclassed from C<Amazon::API> so their C<new()>
 constructor takes the same arguments as C<Amazon::API::new()>.
@@ -2619,14 +2208,6 @@ constructor takes the same arguments as C<Amazon::API::new()>.
  my $credentials = Amazon::Credential->new();
 
  my $sqs = Amazon::API::SQS->new( credentials => $credentials );
-
-If you are going to use the Botocore support and automatically
-generate API classes you I<must also> create the data structure classes
-that are used by each service. The Botocore based APIs will use these
-classes to serialize requests and responses.
-
-For more information on generating API classes, see
-L<Amazon::API::Botocore::Pod>.
 
 =head2 Response Serialization
 
@@ -3162,11 +2743,12 @@ list of key/value pairs passed to the new constructor as options
 
 =back
 
-=head2 create_url_encoded_content
+=head2 create_urlencoded_content
 
  create_urlencoded_content(parameters, action, version)
 
-Returns a URL encoded query string. C<parameters> can be any of SCALAR, ARRAY, or HASH. See below.
+Returns a URL encoded query string. C<parameters> can be any of
+SCALAR, ARRAY, or HASH. See below.
 
 =over 5
 
@@ -3207,16 +2789,6 @@ The method being called. For some query type APIs an Action query variable is re
 The WSDL version for the API. Some query type APIs require a Version query variable.
 
 =back
-
-=head2 paginator
-
- paginator(service, api, request)
-
-Returns an array containing the results of an API call that requires
-pagination,
-
-
- my $result = paginator($ec2, 'DescribeInstances', { MaxResults => 10 });
 
 =head2 param_n
 
@@ -3268,6 +2840,10 @@ To produce this message you would pass the Perl object below to C<param_n()>:
    ]
  };
 
+=head2 service
+
+See L</get_api_service>
+
 =head1 CAVEATS
 
 =over 5
@@ -3296,7 +2872,7 @@ metadata has fallen behind the live API.
 =head1 IMPLEMENTATION NOTES
 
 If you have taken the advice above and created classes using the
-F<amazon-api> script you can probably ignore this section. This
+F<amzn-api> script you can probably ignore this section. This
 section is intended to help those trying to create the lightest weight
 possible AWS API class.
 
@@ -3383,7 +2959,7 @@ and examine the payloads sent by the Botocore library.
 
 =head3 Rolling a New API
 
-Once again, your best bet is to use the C<amazon-api> script to roll a
+Once again, your best bet is to use the C<amzn-api> script to roll a
 class from the Botocore metadata, but if you really want to create your own
 class the lite way read on.
 
@@ -3517,7 +3093,7 @@ response.
 
 =head1 VERSION
 
-This documentation refers to version @PACKAGE_VERSION@  of C<Amazon::API>.
+This documentation refers to version @PACKAGE_VERSION@ of C<Amazon::API>.
 
 =head1 DIAGNOSTICS
 
@@ -3572,100 +3148,41 @@ used services and you might find this module easier to use and debug.
 
 =head2 Does it perform better than Paws?
 
-Probably not. But individual API calls to Amazon services have their
-own performance characteristics and idiosyncracies.  The overhead
-introduced by this module and Paws may be insignificant compared to
-the API performance itself, however Paws is implemented using Moose
-and the startup time for a Moose script can longer than the startup
-script when using this module. YMMV.
+It depends on how you define better. C<Amazon::API> has fewer
+dependencies and will load faster than C<Paws>. It will consume less
+memory as well. API calls to AWS services will be about the same, with
+an edge to C<Amazon::API> which returns plain Perl objects instead of
+Moose classes. The overhead introduced by this module and Paws may be
+insignificant compared to the API performance.
 
 =head2 Does this work for all APIs?
 
-I don't know. Probably not? Feedback is appreciated. L<Amazon::API>
-has been developed based on my needs and used accordingly.  Although I
-have tested it on many APIs, there may still be some cases that are
-not handled properly and I am still deciphering the nuances of
-flattening, boxing and serializing objects to send to Amazon APIs. The
-newer versions of this module using Botocore metadata have become
-increasingly reliable over time and I'm somewhat confident that my
-interpretation of the Botocore data produces working classes.
+I don't know. I have not tested every API. However I have tested an
+API for each of the protocols that are defined by the Botocore
+metadata (with the exception of smithy-rpc-v2-cbor) and serialization
+for every shape. Feedback is
+appreciated. 
 
-However, keep in mind that Amazon APIs are not created equal,
-homogenous or invoked in the the same way for all services. Some
-accept parameters as a query strings, some parameters are embedded in
-the URI, some are sent as JSON payloads and others as XML. Content
-types for payloads are all over the map.  Likewise with return values.
-
-Luckily, the Botocore metadata describes the protocols, parameters and
-return values for all APIs. The Botocore metadata is quite amazing
-actually. It is used to provide information to the Botocore library
-for calling any of the AWS services and even for creating
-documentation!
-
-L<Amazon::API> can use that information for creating the Perl classes
-that invoke each API but may not interpret the metadata correctly in
-all circumstances, so it is likely bugs may still exist.
-
-If you want to use this to invoke S3 APIs, don't. I haven't tried it
-and I'm pretty sure it would not work anyway. There are modules
-designed specifically for S3; L<Amazon::S3>, L<Net::Amazon::S3>. Use
-them instead.
-
-=head2 Do I have to create the shape classes when I generate stubs for a service?
-
-Probably. If you create stubs manually, then you do not need the shape
-classes. If you use the scripts provided to create the API stubs using
-Botocore metadata, then yes, you must create the shapes so that the
-Botocore API methods know how to serialize requests. Note that you can
-create the shape stubs using the Botocore metadata while not creating
-the API services. You might want to do that if you want a lean stub
-but want the benefits of using the shape stubs for serialization of
-the parameters (or you want the pod that comes with those classes).
-
-If you produce your stubs manually and do not create the shape stubs,
-then you must pass parameters to your API methods that are ready to be
-serialized by L<Amazon::API>.  Creating data structures that will be
-serialized correctly however is done for you I<if you use the shape
-classes>.  For example, to create an SQS queue using the shape stubs,
-you can call the C<CreateQueue> API method as describe in the Botocore
-documentation.
-
-  $sqs->CreateQueue(
-    { QueueName => $queue_name,
-      tags      => { Name => 'my-new-queue' },
-      { Env => 'dev' },
-      Attributes => { VisibilityTimeout => 40 },
-      { DelaySeconds => 60 }
-    }
-  );
-
-If you do not use the shape classes, then you must pass the arguments
-in the form that will eventually be serialized in the correct manner
-as a query string.
-
- $sqs->CreateQueue([
-  'QueueName=foo',
-  'Attributes.1.Value=100',
-  'Attributes.1.Name=VisibilityTimeout',
-  'Tag.1.Key=Name',
-  'Tag.1.Value=foo',
-  'Tag.2.Key=Env',
-  'Tag.2.Value=dev'
- ]);
+Some AWS services are difficult if not impossible to create an API
+class that implements them (talkin' to you S3!).  If you want to use
+this to invoke S3 APIs, don't. I haven't tried it and I'm pretty sure
+it would'nt work anyway. There are modules designed specifically for
+S3; L<Amazon::S3::Lite>, L<Amazon::S3>, L<Net::Amazon::S3>. Use them
+instead.
 
 =head2 This code does not use "Modern Perl". Why?
 
-This code has evolved over the years from being I<ONLY> a way to make
-RESTful calls to a few Amazon APIs, to incorporating the use of the
-Botocore metadata. It I<was> one person's effort to create a somewhat
-lightweight interface to selected AWS APIs.
+This code has evolved over the years from being a simple way to make
+RESTful calls to a few Amazon APIs, to an API that now incorporates
+the use of the Botocore metadata to support nearly every API
+service.
 
-The code did not start out as well designed attempt to interpret the
-Botocore data by creating a monolithic framework to call ANY AWS
-API. Perhaps if it were designed today it might use more of Modern
-Perl, like Moose as does Paws. The code does however embrace Perl Best
-Practices.  Running C<perlcritic> with the Perl Best Practices theme
-should show no or very few findings.
+The code did not start out as a well designed attempt to interpret the
+Botocore data like the Paws project...and that has turned out to be a
+happy accident. By avoiding frameworks like Moose the resulting
+interface is about as lightweight as it can possibly be. The code does
+however embrace Perl Best Practices to create a more maintainable and
+familiar distribution.
 
 =head2 How do I pass AWS credentials to the API?
 
@@ -3682,8 +3199,9 @@ Yes. See L<Amazon::Credentials>.
 
 =head2 How stable is the interface?
 
-As of version 2.1.0 the interface is quite stable.  I'm not aware of
-any current bugs and now consider this project "production ready".
+As of version 2.1.0 the interface is quite stable. There are currently
+(as of 2.6.0) no outstanding bugs logged against the project. I now
+consider this project "production ready".
 
 =head2 Why are you using XML::Simple when it clearly says "DO NOT"?
 
@@ -3721,14 +3239,14 @@ helpful in understanding how requests and responses are serialized.
 
 =item * You didn't read the docs and passed bad data
 
- amazon-api -s sqs CreateQueue
+ amzn-api -s sqs CreateQueue
 
 =item * The serialization of Amazon::API::Botocore::Shape isn't working
 
-Serialization output for every class for every API has not been fully
-tested and my never be given the breadth of objects and services. You
-may find that some API methods return C<Bad Request> or do not
-serialize the results (or more likely requests) in the manner
+Serialization output for every class for every API method has not been
+fully tested and my never be given the breadth of objects and
+services. You may find that some API methods return C<Bad Request> or
+do not serialize the results (or more likely requests) in the manner
 expected. Requests are serialized based I<solely> on the metadata
 found in the Botocore project. There lie the clues for each API
 (protocol, end points, etc) and the models (shapes) for requests and
@@ -3738,8 +3256,8 @@ Some requests require a query string, some an XML or JSON payload. The
 Botocore based API classes use the metadata to determine how to send a
 request and how to interpret the results. This module uses
 L<XML::Simple> or L<JSON> to parse the results. It then uses the
-L<Amazon::API::Botocore::Serializer> to turn the parsed results into a
-Perl object that respresents the response shape.
+L<Amazon::API::Botocore::Shape::Serializer> to turn the parsed results
+into a Perl object that respresents the response shape.
 
 It's likely that there are exceptions that are handled as special
 cases in the Python or Java libraries that also use the Botocore
@@ -3747,108 +3265,20 @@ metadata. In that case use the C<aws> CLI command in C<--debug> mode
 to examine the request and response.
 
 You can find information about each API's request and response from
-the documentation created for each service.
+the documentation available in the L<Amazon::API::Help> tool.
 
- perldoc Amazon::API::Botocore::Shape::EC2:DescribeInstancesRequest
-
-or more succinctly:
-
- amazon-api -s ec2 help DescribeInstancesRequest
+ amzn-api-help ec2 DescribeInstancesRequest
 
 Make sure you understand what the API request should look
-like. C<amazon_api> will help illuminate the structure of requests you
+like. C<amzn-api> will help illuminate the structure of requests you
 should be sending to APIs.
 
- amazon-api -s sqs help CreateQueue
+ amzn-api-help sqs CreateQueue
 
 You can also dump the Botocore metadata from the generated classes using
-C<amazon-api>.
+C<amzn-api>.
 
- amazon-api -s sqs describe
-
-=over 10
-
-=item Additional Details
-
-Some APIs, most notably query protocol APIs like EC2 seem to require
-special serializers. Looking at the Python implementation of the
-Botocore library reveals a separate EC2 serializer.  This API has no
-such "hook" for APIs that require a unique intepretation of the
-Botocore metadata. 
-
-You can however create the correct payloads expected by an API and
-pass those when you make a request. For example, the EC2
-DescribeSecurityGroups API accepts a Filter object to filter the
-results. The Python Botocore signature looks like this:
-
-  response = client.describe_security_groups(
-      Filters=[
-          {
-              'Name': 'string',
-              'Values': [
-                  'string',
-              ]
-          },
-      ],
-      GroupIds=[
-          'string',
-      ],
-      GroupNames=[
-          'string',
-      ],
-      DryRun=True|False,
-      NextToken='string',
-      MaxResults=123
-  )
-
-That signature provides a convenient way to pass the required
-parameters to the API. However, when actually passed to the API the
-payload is serialized into a query string parameter that might look
-something like:
-
- Filter.1.Name=group-name&Filter.1.Value.1=some-value&Action=DescribeSecurityGroups&Version=2016-11-15
-
-The Filters object you passed gets serialized into I<param.n> notation
-as described earlier in this documentation. Knowing that fact (by
-looking at the AWS API for DescribeSecurityGroups) and experiencing a
-failure when sending what should be the correct request to the API
-using this class, you could send correctly formatted payloads to query
-protocol APIs like this one.
-
- my @filter = param_n(
-    { Filter => [
-        { Name  => 'group-name',
-          Value => ['tbc-ssh-only']
-        }
-      ]
-    }
-  );
-
- print Dumper([filter => \@filter]);
-
-Would result in:
-
- $VAR1 = [
-           'filter',
-           [
-             'Filter.1.Name=group-name',
-             'Filter.1.Value.1=tbc-ssh-only'
-           ]
-         ];
-
-Arrays passed to query protocol requests are assumed to be lists of
-query variables and values and are added to the URL when the request
-is made.
-
-I<Hopefully, as more is learned about serializing those kinds of API
-requests this class will be able to successfully make those API
-calls.>
-
-I<UPDATE: Try using the Botocore protocol for APIs by passing a hash
-reference of expected variables first. Recent updates have been made
-to create special serializers for these older query protocol APIs.>
-
-=back
+ amzn-api describe-service sqs
 
 If you find this project's serializer deficient, please log an issue
 and I will attempt to address it.
@@ -3862,6 +3292,24 @@ implementation of Amazon APIs for Perl. Several companion projects have
 been developed with the same philosophy.
 
 =over 4
+
+=item L<Amazon::API::Help>
+
+A complete help system for exposing API methods, request objects and
+response objects. This is shipped separately so that the run-time
+C<Amazon::API> is a lean as possible.
+
+ # get help for a service
+ amzn-api-help sts
+
+ # get help for a method
+ amzn-api-help sqs ListQueues
+
+ # get help for a request object
+ amzn-api-help sqs ListQueuesRequest
+
+I<Note: method help will expose the request objects, response objects
+and parameters>
 
 =item L<Amazon::Credentials>
 
@@ -3880,6 +3328,10 @@ without the overhead of a full SDK.
 A complete implementation of the AWS Lambda Runtime API that allows
 Perl developers to write and deploy Lambda functions.
 
+=item L<Amazon::Lambda::Runtime::Builder>
+
+A complete build system for creating Perl Lambdas.
+
 =item L<Log::Log4perl::Appender::CloudWatch>
 
 A L<Log::Log4perl> appender that sends log events directly to AWS
@@ -3895,22 +3347,10 @@ re-entrant logging conflicts.
 This module is free software. It may be used, redistributed and/or
 modified under the same terms as Perl itself.
 
-=head1 TBD
+=head1 SEE ALSO
 
-=over 4
-
-=item * Decrease load time of C<Amazon::API>
-
-=item * Reduce generated class modules sizes by separating out pod
-
-=item * Investigate a different way to load Botocore metadata rather
-than embedding it in each module
-
-=back
-
-=head1 SEE OTHER
-
-L<Amazon::Credentials>, L<Amazon::API::Error>, L<AWS::Signature4>, L<Amazon::API::Botocore>, L<Paws>
+L<Amazon::API::Help>, L<Amazon::Credentials>, L<Amazon::API::Error>
+L<Amazon::Lambda::Runtime>, L<Amazon::Lambda::Runtime::Builder>, L<Paws>
 
 =head1 AUTHOR
 

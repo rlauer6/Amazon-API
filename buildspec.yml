@@ -21,6 +21,11 @@ extra-files:
       - services.api
       - botocore-metadata.api
       - Amazon-API.pem
+      - botocore.mk
+      - module-names.json
+      - botocore-version.json
+      - share/stub.pm.tmpl
+      - buildspec-api.yml.in
 resources:
   bugtracker:
     mailto: rclauer@gmail.com

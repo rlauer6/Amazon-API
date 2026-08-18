@@ -1,31 +1,3 @@
-Amazon::Signature4::Lite 1.0.1
-Amazon::Credentials
-Carp::Always
-Class::Accessor::Fast
-CLI::Simple 2.0.7
-CPAN::Maker@2.0.1
-CPAN::Maker::Bootstrapper@2.0.4
-Date::Format
-File::ShareDir
-File::ShareDir::Install
-HTTP::Request
-HTTP::Headers
-HTTP::Tiny
-IO::Scalar
-IO::Socket::SSL
-JSON::XS
-List::MoreUtils
-List::Util
-Net::SSLeay
+CPAN::Maker::Bootstrapper@2.3.0
 Markdown::Render
-Pod::HTML2Pod
-Pod::Extract
 Pod::Markdown
-Pod::Find
-Pod::Simple
-Readonly
-Test::More
-URL::Encode
-URI
-XML::Simple
-XML::Twig

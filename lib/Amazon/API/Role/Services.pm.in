@@ -1,0 +1,120 @@
+package Amazon::API::Role::Services;
+
+use strict;
+use warnings;
+
+use Amazon::API::Constants qw(%SERVICE_CONTENT_TYPES);
+use Carp;
+use CLI::Simple::Constants qw(:booleans);
+use CLI::Simple::Utils qw(slurp_json choose);
+use Data::Dumper;
+use English qw(-no_match_vars);
+use File::ShareDir qw(dist_file);
+use JSON qw(decode_json encode_json);
+use Storable qw(nstore retrieve);
+
+use Role::Tiny;
+
+########################################################################
+sub cmd_list_services {
+########################################################################
+  my ($self) = @_;
+
+  my ($service) = $self->get_args;
+
+  my $boto_path = $self->get_botocore_path;
+
+  my $boto_services = choose {
+    if ($boto_path) {
+      $self->_check_botocore_path($boto_path);
+
+      return $self->fetch_boto_services;
+    }
+
+    return retrieve('botocore-metadata.api')
+      if -e 'botocore-metadata.api';
+
+    my ($metadata_file) = grep { -e $_ } ( 'botocore-metadata.api', dist_file( 'Amazon-API', 'botocore-metadata.api' ) );
+
+    return retrieve($metadata_file)
+      if $metadata_file;
+
+    croak "ERROR: usage: list-services -b botocore-path service\n"
+  };
+
+  if ($service) {
+    if ( my $filter = $self->get_filter ) {
+      print {*STDOUT} $boto_services->{$service}{$filter} // '<undefined>';
+    }
+    else {
+      print {*STDOUT} JSON->new->pretty->encode( $boto_services->{$service} );
+    }
+  }
+  else {
+    print {*STDOUT} JSON->new->pretty->encode($boto_services);
+  }
+
+  return $SUCCESS;
+}
+
+########################################################################
+sub cmd_create_services {
+########################################################################
+  my ($self) = @_;
+
+  my $boto_path = $self->_check_botocore_path( $self->get_botocore_path );
+
+  my $output_path = $self->get_output_path;
+
+  my $file = sprintf '%s/%s', $output_path, $self->get_file // 'services.api';
+
+  my $boto_services = $self->fetch_boto_services;
+
+  my $limit = $self->get_limit // scalar keys %{$boto_services};
+
+  my $count = 0;
+
+  my %service_protocol;
+
+  foreach my $s ( sort keys %{$boto_services} ) {
+    last if !$limit;
+
+    my $path = join q{/}, @{ $boto_services->{$s}->{path} };
+
+    my $service  = slurp_json($path);
+    my $metadata = $service->{metadata};
+
+    my $protocol    = $metadata->{protocol};
+    my $protocols   = $metadata->{protocols} // [$protocol];
+    my $jsonVersion = $metadata->{jsonVersion};
+
+    $limit--;
+
+    $self->get_logger->info( sprintf '%s - (%s/%s)', $path, ++$count, scalar keys %{$boto_services} );
+
+    foreach my $protocol ( @{$protocols} ) {
+      next if !exists $SERVICE_CONTENT_TYPES{$protocol};
+
+      my $content_type = $SERVICE_CONTENT_TYPES{$protocol};
+
+      if ( $protocol eq 'json' && $jsonVersion ) {
+        $content_type = sprintf '%s-%s', $content_type, $jsonVersion;
+      }
+
+      $service_protocol{$s} = $content_type;
+
+      last;
+    }
+  }
+
+  nstore(
+    { service_protocol => \%service_protocol,
+      content_types    => \%SERVICE_CONTENT_TYPES,
+    },
+    $file
+  );
+
+  return $SUCCESS;
+}
+
+1;

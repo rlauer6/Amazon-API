@@ -14,13 +14,13 @@ path:
   pm-module: lib
 extra-files:
   - share:
-      - lib/@service@.api
+      - lib/Amazon/API/@service@.api.gz
 resources:
-  homepage: 'http://github.com/rlauer6/perl-Amazon-API'
+  homepage: 'http://github.com/rlauer6/Amazon-API'
   bugtracker:
-    web: 'http://github.com/rlauer6/perl-Amazon-API/issues'
+    web: 'http://github.com/rlauer6/Amazon-API/issues'
     mailto: @email@
   repository:
-    url: 'git://github.com/rlauer6/perl-Amazon-API.git'
-    web: 'http://github.com/rlauer6/perl-Amazon-API'
+    url: 'git://github.com/rlauer6/Amazon-API.git'
+    web: 'http://github.com/rlauer6/Amazon-API'
     type: 'git'

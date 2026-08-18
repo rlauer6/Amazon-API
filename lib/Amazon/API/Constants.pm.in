@@ -90,9 +90,19 @@ Readonly::Hash our %LOG4PERL_LOG_LEVELS => (
   fatal => $FATAL,
 );
 
+Readonly::Hash our %SERVICE_CONTENT_TYPES => (
+  ec2         => 'application/x-www-form-urlencoded',
+  query       => 'application/x-www-form-urlencoded',
+  'rest-json' => 'application/json',
+  json        => 'application/x-amz-json',
+  'rest-xml'  => 'application/xml',
+);
+
 foreach my $k ( keys %EXPORT_TAGS ) {
   push @EXPORT_OK, @{ $EXPORT_TAGS{$k} };
 }
+
+push @EXPORT_OK, '%SERVICE_CONTENT_TYPES';
 
 $EXPORT_TAGS{'all'} = [@EXPORT_OK];
 

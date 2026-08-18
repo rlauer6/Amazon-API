@@ -1,2 +1,4 @@
+CLI::Simple::Constants
+CLI::Simple::Utils
 Amazon::API::SSM
 Amazon::API::KMS

@@ -122,23 +122,16 @@ sub _create_tarball_digest {
   my $fullpath = "$output_path/$tarball";
 
   die "ERROR: $fullpath not found\n"
-    if !-e "$fullpath";
+    if !-e $fullpath;
 
-  require Archive::Tar;
+  open my $fh, '<', $fullpath
+    or die "ERROR: $fullpath: $!\n";
 
-  my $tar = Archive::Tar->new;
+  binmode $fh;
+  my $digest = Digest::SHA->new(256)->addfile($fh)->hexdigest;
+  close $fh;
 
-  $tar->read( $fullpath, 1 );
-
-  my @sha256sums;
-
-  foreach my $f ( $tar->list_files() ) {
-    next if $f !~ /[.]pm$/xsm;
-
-    push @sha256sums, sha256_hex( $tar->get_content($f) );
-  }
-
-  return { tarball => $tarball, digest => sha256_hex("@sha256sums") };
+  return { tarball => $tarball, digest => $digest };
 }
 
 1;

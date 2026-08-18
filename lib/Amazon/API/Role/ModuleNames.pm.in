@@ -1,0 +1,99 @@
+package Amazon::API::Role::ModuleNames;
+
+use strict;
+use warnings;
+
+use Carp;
+use CLI::Simple::Constants qw(:booleans);
+use CLI::Simple::Utils qw(slurp_json choose);
+use Data::Dumper;
+use English qw(-no_match_vars);
+use JSON;
+use Storable qw(nstore retrieve);
+
+use Role::Tiny;
+
+########################################################################
+sub cmd_create_module_names {
+########################################################################
+  my ($self) = @_;
+
+  my $botocore_path = $self->_check_botocore_path( $self->get_botocore_path );
+
+  my $metadata_file = sprintf '%s/botocore-metadata.api', $self->get_output_path;
+
+  my $boto_services = choose {
+    return retrieve($metadata_file)
+      if -e $metadata_file;
+
+    $self->get_logger->info( sprintf 'fetching boto services%s', $self->get_metadata ? ' with metadata' : q{} );
+
+    return $self->fetch_boto_services( $self->get_metadata );
+  };
+
+  $self->_update_module_names($boto_services);
+
+  $self->get_logger->info( sprintf 'storing %s...', $metadata_file );
+
+  nstore $boto_services, $metadata_file;
+
+  return $SUCCESS;
+}
+
+########################################################################
+sub _update_module_names {
+########################################################################
+  my ( $self, $boto_services ) = @_;
+
+  my $module_names_file = sprintf '%s/module-names.json', $self->get_output_path;
+  my $canonical_names   = slurp_json($module_names_file);
+
+  my %module_names;
+
+  foreach my $service ( keys %{$boto_services} ) {
+
+    my $metadata = $boto_services->{$service}->{metadata} // {};
+    $boto_services->{$service}->{metadata} = $metadata;
+
+    my $service_id = $metadata->{serviceId};
+    my $cname      = $canonical_names->{$service}->{module_name};
+
+    if ( !$cname ) {
+      $self->get_logger->warn( sprintf 'new service found: %s', $service );
+
+      $cname = $module_names{$service} = $service_id;
+      $canonical_names->{$service} = { module_name => $cname, auto_generated => \1 };
+
+      my @parts = split /[\- ]/, $service_id;
+
+      if ( @parts != 1 || $parts[0] !~ /^[A-Z]/xsm ) {
+        if ( @parts == 1 ) {
+          $cname = $module_names{$service} = length $parts[0] > 3 ? ucfirst $parts[0] : uc $parts[0];
+          $canonical_names->{$service}->{module_name} = $cname;
+        }
+        else {
+          $cname = $module_names{$service} = join q{}, map { ucfirst $_ } @parts;
+          $canonical_names->{$service}->{module_name} = $cname;
+        }
+      }
+    }
+
+    my $perl_module_name = sprintf 'Amazon::API::%s', $cname;
+    $self->get_logger->info( sprintf '%s => %s', $service, $perl_module_name );
+
+    $metadata->{metadata}->{perl_module_name} = $perl_module_name;
+  }
+
+  $self->get_logger->info( sprintf 'saving %s...', $module_names_file );
+
+  open my $fh, '>', $module_names_file
+    or croak sprintf 'ERROR: could not open %s for writing: %s', $module_names_file, $OS_ERROR;
+
+  print {$fh} JSON->new->pretty->canonical->encode($canonical_names);
+
+  close $fh;
+
+  return;
+}
+
+1;

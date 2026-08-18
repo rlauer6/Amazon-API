@@ -6,19 +6,16 @@ use warnings;
 use parent qw(Exporter);
 
 use Amazon::API::Constants qw(:booleans :chars);
-use Amazon::API::BuildInfo;
 
 use Carp;
 use Data::Dumper;
 use English qw(-no_match_vars);
 use List::Util qw( pairs any uniq );
-use Module::Load;
 use Readonly;
 use Scalar::Util qw(reftype blessed );
 
 our @EXPORT_OK = qw(
   $SHAPE_NAME_TEMPLATE
-  create_shape
   create_module_name
   check_pattern
   check_enum
@@ -36,7 +33,6 @@ our @EXPORT_OK = qw(
   register_service_shapes
   require_class
   require_shape
-  snake_case
 );
 
 our %EXPORT_TAGS = ( all => [@EXPORT_OK] );
@@ -45,37 +41,7 @@ Readonly::Scalar our $SHAPE_NAME_TEMPLATE => 'Amazon::API::Botocore::Shape::%s::
 
 our $VERSION = '@PACKAGE_VERSION@'; ## no critic (RequireInterpolationOfMetachars)
 
-our $TEMPLATE_START = tell DATA;
-
 our %SERVICE_SHAPES;  # cache keyed by service name
-
-########################################################################
-sub to_template_var {
-########################################################################
-  load 'Amazon::API::Template';
-  return Amazon::API::Template::to_template_var(@_);
-}
-
-########################################################################
-sub fetch_template {
-########################################################################
-  load 'Amazon::API::Template';
-  return Amazon::API::Template::fetch_template(@_);
-}
-
-########################################################################
-sub render_template {
-########################################################################
-  load 'Amazon::API::Template';
-  return Amazon::API::Template::render_template(@_);
-}
-
-########################################################################
-sub html2pod {
-########################################################################
-  load 'Amazon::API::Template';
-  return Amazon::API::Template::html2pod(@_);
-}
 
 ########################################################################
 sub register_service_shapes {
@@ -115,11 +81,12 @@ sub create_module_name {
 ########################################################################
   my ($service) = @_;
 
-  return uc $service
-    if length $service == 3;  # SQS SNS IAM STS SES RDS...
+  require Amazon::API::Role::Botocore;
 
-  # just return name if mix of upper/lower, else upper case first letter
-  return $service =~ /[[:upper:]]/xsm ? $service : ucfirst $service;
+  my $package_name = Amazon::API::Role::Botocore->module_name($service);
+  $package_name =~ s/^.*::([^:]+)$/$1/xsm;
+
+  return $package_name;
 }
 
 ########################################################################
@@ -131,7 +98,7 @@ sub require_class {
 
   $class_path =~ s/::/\//xsmg;
 
-  my $retval = eval { load "$class_path.pm"; };
+  my $retval = eval { require "$class_path.pm"; 1; };
 
   return $retval ? $INC{"$class_path.pm"} : undef;
 }
@@ -141,7 +108,8 @@ sub get_service_from_class {
 ########################################################################
   my ($class) = @_;
 
-  # find the service name, we'll need then when creating the request class
+  # return the canonical service name (e.g. CloudFront), we'll need this
+  # when creating the request class
   my $name = ref $class ? ref $class : $class;
 
   if ( $name =~ /::([^:]+)$/xsm ) {
@@ -203,27 +171,6 @@ sub _create_shape_class {
   };
 
   return;
-}
-
-########################################################################
-# snake_case name
-#
-# Attempts to create a snake case name from a CamelCase name
-# - FooBar => foo_bar
-# - FOOBar => FOO_Bar
-
-########################################################################
-sub snake_case {
-########################################################################
-  my ($name) = @_;
-
-  while ( $name =~ s/([[:upper:]])([[:lower:]])/lc("_$1").$2/xsme ) { };  # snake_case the CamelCase
-
-  $name =~ s/^_//xsm;
-
-  $name =~ s/([[:lower:]])([[:upper:]])/$1_$2/gxsm;
-
-  return $name;
 }
 
 ########################################################################
@@ -488,204 +435,5 @@ sub create_shape_name {
 
   return sprintf $SHAPE_NAME_TEMPLATE, $service, $name;
 }
-
-########################################################################
-sub create_shape {
-########################################################################
-  my (%args) = @_;
-
-  my ( $shape_name, $service_description, $service ) = @args{qw( name service_description service )};
-
-  my $shapes = $service_description->{shapes};
-
-  my $shape = $shapes->{$shape_name};
-
-  my $shape_class = create_shape_name( $shape_name, $service );
-
-  my $shape_template = fetch_template( *DATA, $TEMPLATE_START );
-
-  my $description = html2pod( $shape->{documentation} );
-
-  my $required = join "\n", map {"=item $_\n"} @{ $shape->{required} };
-
-  my $type = $shape->{type};
-
-  my @members;
-  my @see_also;
-
-  if ( $shape->{member} ) {
-    push @members, sprintf "=item %s\n", $shape->{member}->{shape};
-  }
-  elsif ( $shape->{members} ) {
-    foreach my $m ( sort keys %{ $shape->{members} } ) {
-      my $member = $shape->{members}->{$m};
-
-      my $type          = $member->{shape};
-      my $location_name = $member->{locationName} || $m;
-
-      $type = sprintf 'L<%s|Amazon::API::Botocore::Shape::%s::%s/%s>', $type, $service, $type, $type;
-
-      push @see_also, $type;
-
-      my $description = html2pod( $member->{documentation} );
-      $description =~ s/\A\n+//xsm;
-      $description =~ s/[\n]+\z//xsm;
-
-      my @item_block = (
-        '=item'    => 'Name: %s',
-        '=over 10' => "\n",
-        '=item'    => "Type\n\n%s",
-        '=item'    => "Description\n\n%s",
-        '=back'    => $EMPTY,
-      );
-
-      my $item = "\n";
-      foreach my $p ( pairs @item_block ) {
-        $item .= join "\n", @{$p}, "\n";
-      }
-      push @members, sprintf $item, $m, $type, $description;
-    }
-  }
-
-  @see_also = uniq @see_also;
-
-  my @limits;
-
-  foreach (qw( max min pattern )) {
-    if ( $shape->{$_} ) {
-      push @limits, sprintf "=item %s: %s\n", $_, $shape->{$_};
-    }
-  }
-
-  my $lc_name = snake_case $shape_name;
-
-  my %parameters = (
-    to_template_var('see_also')     => join( "$COMMA ", @see_also ),
-    to_template_var('lc_name')      => $lc_name,
-    to_template_var('package_name') => $shape_name,
-    to_template_var('program_name') => $PROGRAM_NAME,
-    to_template_var('git_hash')     => $Amazon::API::BuildInfo::GIT_SHA,
-    to_template_var('class')        => $shape_class,
-    to_template_var('service')      => $service,
-    to_template_var('description')  => $description,
-    to_template_var('type')         => $type,
-    to_template_var('required')     => $required,
-    to_template_var('members')      => join( "\n", @members ) . "\n",
-    to_template_var('limits')       => join( "\n", @limits ) . "\n",
-  );
-
-  my $synopsis;
-
-  if ( !$shape->{members}->{message} ) {
-    $synopsis = <<'END_OF_POD';
-=head1 SYNOPSIS
-
- my $@lc_name@ = @class@->new( $parameters );
-END_OF_POD
-
-    $synopsis = render_template( $synopsis, \%parameters );
-  }
-
-  $parameters{ to_template_var('synopsis') } = $synopsis // $EMPTY;
-
-  my $pod = render_template( $shape_template, \%parameters );
-
-  return $pod;
-}
-
-1;
-
-__DATA__
-
-=pod
-
-=encoding utf8
-
-=head1 NAME
-
-@class@
-
-@synopsis@
-
-=head1 DESCRIPTION
-
-@description@
-
-=head1 PARAMETERS
-
-=over 5
-
-=item Type: @type@
-
-@limits@
-
-=back
-
-=over 5
-
-@members@
-
-=back
-
-=head1 NOTE
-
-You almost never need to actually instantiate these objects
-manually if you are using the APIs that are built using Botocore
-support. Data structures required for each API are created
-automatically for you from simple Perl objects.  For example to create
-an SQS queue the Botocore documentation states that you need to pass the
-C<QueueName>, C<Attribute> and C<Tag> values.
-
- my $result = $sqs->CreateQueue(
-    {
-     QueueName => 'foo',
-     Tag       => [ { Name              => 'foo' }, { Env => 'dev' } ],
-     Attribute => [ { VisibilityTimeout => 40 },    { DelaySeconds => 60 } ]
-    });
-
-Each of these parameters is described in the Botocore metadata as one
-of several different shapes which ultimately are mapped to one of the
-data types below.
-
-=over 5
-
-=item * map
-
-A I<map> generally corresponds to an array of hashes which represent key/value pairs.
-
-=item * list
-
-A I<list> corresponds to an array. Lists can have a minimum or maximum length.
-
-=item * string
-
-A I<string> corresponds to a SCALAR containing a character string. The
-string may be constrained by a pattern or can be an enumeration.
-
-=item * integer
-
-An I<integer> corresponds to a SCALAR containing an integer value.
-The integer may have a max and minimum value.
-
-=item * boolean
-
-A I<boolean> values corresponds to a SCALAR containing the values 'true' or 'false'
-
-=back
-
-L<Amazon::API::Botocore::Shape> handles converting Perl data
-structures into shapes and eventually back into Perl data structures
-which can be properly serialized as input to the APIs.
-
-=head1 SEE ALSO
-
-L<Amazon::API>, L<Amazon::API::Botocore::Shape>
-@see_also@
-
-=head1 AUTHOR
-
-Autogenerated from version @git_hash@
-
-=cut
 
 1;

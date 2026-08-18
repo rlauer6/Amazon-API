@@ -9,7 +9,7 @@ local:  cpanfile
 	    for a in $$(cat build-mirrors 2>/dev/null); do \
 	      resolvers+=(--resolver 02packages,$$a); \
 	    done; \
-	    cpm install -L local "$${resolvers[@]}" ;; \
+	    cpm install -L local "$${resolvers[@]}" --show-build-log-on-failure;; \
 	  carton) \
 	    mirror=$$(head -1 build-mirrors 2>/dev/null); \
 	    env PERL_CARTON_MIRROR="$$mirror" carton install ;; \
