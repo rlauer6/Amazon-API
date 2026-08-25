@@ -23,6 +23,7 @@ use JSON::PP;
 __PACKAGE__->follow_best_practice;
 __PACKAGE__->mk_accessors(
   qw(
+    document
     documentation
     enum
     flattened
@@ -44,6 +45,7 @@ __PACKAGE__->mk_accessors(
     timestampFormat
     type
     _value
+    xmlNamespace
   )
 );
 
@@ -141,12 +143,21 @@ sub _init_structure {
   my %result = %{$value};  # do not alter input!
 
   foreach my $member ( keys %{ $self->get_members } ) {
+    my $member_config = $self->get_members->{$member};
+
+    if ( $member_config->{idempotencyToken}
+      && !exists $result{$member} ) {
+      require Data::UUID;
+
+      my $ug = Data::UUID->new;
+
+      $result{$member} = lc $ug->create_str;
+    }
 
     if ( exists $result{$member} ) {
       my $val = $result{$member};
-      next if blessed $val && reftype($val) eq 'SCALAR';  # JSON::PP::true
 
-      my $class = require_shape( $self->get_members->{$member}->{shape}, $self->get_service );
+      my $class = require_shape( $member_config->{shape}, $self->get_service, );
 
       $result{$member} = $class->new($val);
     }
@@ -264,6 +275,12 @@ sub _init_value {
   return
     if !defined $value;
 
+  if ( $self->get_document ) {
+    $self->set__value($value);
+
+    return $value;
+  }
+
   # timestamp members accept an epoch or any object that can ->epoch
   # (Time::Piece, DateTime - duck-typed, never loaded here). Coerce to epoch
   # now so it satisfies the SCALAR guard below and formats downstream.
@@ -284,13 +301,14 @@ sub _init_value {
     long      => 'SCALAR',
     timestamp => 'SCALAR',
     double    => 'SCALAR',
+    float     => 'SCALAR',
     boolean   => 'SCALAR',
     blob      => 'SCALAR',
   );
 
   my $required_type = $types{ $self->get_type };
 
-  my $actual_type = ref($value) || 'SCALAR';
+  my $actual_type = ref($value) ? reftype($value) : 'SCALAR';
 
   check_type( $required_type, $actual_type )
     or croak sprintf '%s requires a value of type %s', ref $self,
@@ -315,6 +333,9 @@ sub _init_value {
 sub get_shape_type {
 ########################################################################
   my ($self) = @_;
+
+  return 'SCALAR'
+    if $self->get_document;
 
   return 'MAP'
     if $self->is_map;
@@ -374,22 +395,17 @@ sub finalize {
         return defined $val ? $val + 0 : $val;
       }
       elsif ( $type eq 'float' || $type eq 'double' ) {
+        return $val
+          if defined $val
+          && any { $val eq $_ } qw(NaN Infinity -Infinity);
+
         return defined $val ? $val * 1.0 : $val;
       }
       elsif ( $type eq 'boolean' ) {
-        my $bool_value = $val ? 1 : 0;
+        return $val ? 'true' : 'false'
+          if $PROTOCOL && any { $PROTOCOL eq $_ } qw( ec2 query rest-xml );
 
-        # query/ec2 protocols serialize via param_n()/query_param_n()
-        # (Botocore::Shape::Utils), which flatten the request into
-        # key=value query-string pairs and have no JSON encoder
-        # downstream - they can't handle a JSON::PP::true/false blessed
-        # scalar ref and die trying to dereference it as an array.
-        # JSON-style protocols need the blessed sentinel so the eventual
-        # encode_json call emits true/false rather than "1"/"0".
-        return $bool_value
-          if $PROTOCOL && $PROTOCOL =~ /^(?:query|ec2)$/xsm;
-
-        return $bool_value ? JSON::PP::true : JSON::PP::false;
+        return $val ? JSON::PP::true : JSON::PP::false;
       }
       elsif ( $type eq 'blob' ) {
         # value blobs (KMS Plaintext, Kinesis Data, ...) are base64 on the
@@ -399,7 +415,7 @@ sub finalize {
           if !defined $val || $self->get_streaming;
 
         require MIME::Base64;
-        return MIME::Base64::encode_base64( $val, $EMPTY );  # single line, no breaks
+        return MIME::Base64::encode_base64( $val, $EMPTY );
       }
 
       return $val;
@@ -421,11 +437,20 @@ sub finalize_map {
 
   my ( $key, $value ) = @{$self}{qw(key value)};
 
+  my $is_query_protocol = $PROTOCOL
+    && any { $PROTOCOL eq $_ } qw(query ec2);
+
+  my $is_xml_protocol = $PROTOCOL
+    && $PROTOCOL eq 'rest-xml';
+
+  my $is_entry_map_protocol = $is_query_protocol || $is_xml_protocol;
+
   my $key_location_name   = $key->{locationName};
   my $value_location_name = $value->{locationName};
 
-  $key   = $key_location_name   || undef;
-  $value = $value_location_name || undef;
+  my $key_name = $key_location_name // ( $is_entry_map_protocol ? 'key' : undef );
+
+  my $value_name = $value_location_name // ( $is_entry_map_protocol ? 'value' : undef );
 
   my @elem_list = eval {
     my $values = $self->get__value;
@@ -439,46 +464,79 @@ sub finalize_map {
   };
 
   my $list
-    = $key
-    ? _create_key_value_list( $key, $value, @elem_list )
+    = defined $key_name
+    ? _create_key_value_list( $key_name, $value_name, @elem_list, )
     : [@elem_list];
 
   return flatten( $location_name, $list )
     if $self->is_flattened;
 
-  # Non-flattened maps in the query/ec2 protocols use an 'entry.N'
-  # wrapper (e.g. MessageAttributes.entry.1.Name=Foo), NOT the 'member.N'
-  # wrapper that query_param_n applies to generic lists. Pre-index the
-  # entries into an entry.N-keyed hash here - the only stage that knows
-  # this is a map - so the generic walker emits the correct keys.
-  if ( $key && $PROTOCOL && ( any { $PROTOCOL eq $_ } qw( query ec2 ) ) ) {
+  if ($is_query_protocol) {
     my %indexed;
     my $idx = 1;
+
     foreach my $entry ( @{$list} ) {
       $indexed{ 'entry.' . $idx++ } = $entry;
     }
-    return $location_name ? { $location_name => \%indexed } : \%indexed;
+
+    return $location_name
+      ? { $location_name => \%indexed }
+      : \%indexed;
   }
 
-  # Non-flattened maps with no key/value location names (e.g. Lambda
-  # EnvironmentMap) should be returned as a plain hashref with shape
-  # values finalized. Without this, blessed shape objects survive into
-  # JSON encoding and cause serialization errors.
-  if ( !$key && $PROTOCOL && !( any { $PROTOCOL eq $_ } qw( query ec2 ) ) ) {
-    my %plain;
-    for my $item (@elem_list) {
+  if ($is_xml_protocol) {
+    my @entries;
+
+    foreach my $item (@elem_list) {
       for my $pair ( pairs %{$item} ) {
         my ( $k, $v ) = @{$pair};
-        $plain{$k} = blessed $v ? $v->finalize : $v;
+
+        my $key_value = _apply_local_xml_namespace( $k, $key->{xmlNamespace}, );
+
+        my $value_value
+          = blessed $v
+          ? $v->finalize
+          : $v;
+
+        $value_value = _apply_local_xml_namespace( $value_value, $value->{xmlNamespace}, );
+
+        push @entries,
+          {
+          $key_name   => $key_value,
+          $value_name => $value_value,
+          };
       }
     }
 
-    return $location_name ? { $location_name => \%plain } : \%plain;
+    my $entries = { entry => \@entries, };
+
+    return $location_name
+      ? { $location_name => $entries }
+      : $entries;
   }
 
-  # Keyed non-query maps (REST-JSON maps with explicit key/value
-  # location names) — return the pre-built list as-is.
-  return $location_name ? { $location_name => $list } : $list;
+  if ( !defined $key_name ) {
+    my %plain;
+
+    for my $item (@elem_list) {
+      for my $pair ( pairs %{$item} ) {
+        my ( $k, $v ) = @{$pair};
+
+        $plain{$k}
+          = blessed $v
+          ? $v->finalize
+          : $v;
+      }
+    }
+
+    return $location_name
+      ? { $location_name => \%plain }
+      : \%plain;
+  }
+
+  return $location_name
+    ? { $location_name => $list }
+    : $list;
 }
 
 # @list is an array of key/value hashes
@@ -512,22 +570,79 @@ sub finalize_list {
 
   my $location_name = $member->{locationName};
 
-  my $list = [];
+  my @list;
+
+  foreach my $elem ( @{ $self->get__value } ) {
+    my $value;
+
+    if ( $PROTOCOL
+      && $PROTOCOL eq 'rest-xml'
+      && blessed $elem
+      && $elem->can('get_type')
+      && $elem->get_type eq 'timestamp' ) {
+      my $format = $member->{timestampFormat} // $elem->get_timestampFormat // 'iso8601';
+
+      $value = _format_timestamp( $elem->get__value, $format, );
+    }
+    else {
+      $value = $elem->finalize;
+    }
+
+    $value = _apply_local_xml_namespace( $value, $member->{xmlNamespace}, )
+      if $PROTOCOL && $PROTOCOL eq 'rest-xml';
+    push @list, $value;
+  }
+
+  my $is_query_protocol = $PROTOCOL
+    && any { $PROTOCOL eq $_ } qw(query ec2);
+
+  if ( $PROTOCOL
+    && $PROTOCOL eq 'ec2' ) {
+    return {}
+      if !@list;
+
+    my %indexed;
+    my $idx = 1;
+
+    foreach my $elem (@list) {
+      $indexed{ $idx++ } = $elem;
+    }
+
+    return \%indexed;
+  }
+
+  if ( $PROTOCOL
+    && $PROTOCOL eq 'query' ) {
+    return q{}
+      if !@list;
+
+    my $member_name = $location_name // 'member';
+
+    my %indexed;
+    my $idx = 1;
+
+    foreach my $elem (@list) {
+      $indexed{ $member_name . q{.} . $idx++ } = $elem;
+    }
+
+    return \%indexed;
+  }
+
+  if ( $PROTOCOL && $PROTOCOL eq 'rest-xml' ) {
+    my $member_name = $location_name // 'member';
+
+    return { $member_name => \@list, };
+  }
+
+  my $list = \@list;
 
   my $output;
 
-  my @bare_list_protocols = qw( ec2 query );
-
-  if ( $location_name && none { $PROTOCOL eq $_ } @bare_list_protocols ) {
-    $output = {};
-    $output->{$location_name} = $list;
+  if ($location_name) {
+    $output = { $location_name => $list, };
   }
   else {
     $output = $list;
-  }
-
-  foreach my $elem ( @{ $self->get__value } ) {
-    push @{$list}, $elem->finalize;
   }
 
   return flatten($output)
@@ -589,23 +704,67 @@ sub finalize_structure {
 
   my $output = {};
 
+  if ( $PROTOCOL && $PROTOCOL eq 'rest-xml' ) {
+    my $attributes = _xml_namespace_attributes( $self->get_xmlNamespace, );
+
+    if ($attributes) {
+      $output->{_attr} = $attributes;
+    }
+  }
+
   foreach my $member ( keys %{$members} ) {
 
+    my $member_config = $members->{$member};
     my $member_name;
 
-    if ( !$members->{$member}->{location} ) {
-      $member_name = $members->{$member}->{locationName} // $member;
+    if ( $PROTOCOL
+      && $PROTOCOL eq 'ec2' ) {
+      if ( defined $member_config->{queryName} ) {
+        $member_name = $member_config->{queryName};
+      }
+      elsif ( defined $member_config->{locationName} ) {
+        $member_name = ucfirst $member_config->{locationName};
+      }
+      else {
+        $member_name = ucfirst $member;
+      }
+    }
+    elsif ( !$member_config->{location} ) {
+      $member_name = $member_config->{locationName} // $member;
     }
     else {
       $member_name = $member;
     }
 
-    next
-      if !defined $self->get__value->{$member};
-
     my $value = $self->get__value->{$member};
 
-    if ( blessed $value && $value->can('get_type') && $value->get_type eq 'timestamp' ) {
+    next
+      if !defined $value;
+
+    if ( $PROTOCOL
+      && ( any { $PROTOCOL eq $_ } qw(json rest-json) )
+      && blessed $value
+      && $value->can('get__value')
+      && !defined $value->get__value ) {
+      next;
+    }
+
+    if ( $PROTOCOL
+      && $PROTOCOL eq 'rest-xml'
+      && $members->{$member}->{xmlAttribute} ) {
+      my $attribute_value
+        = blessed $value && $value->can('finalize')
+        ? $value->finalize
+        : $value;
+
+      $output->{_attr}->{$member_name} = $attribute_value;
+
+      next;
+    }
+
+    if ( blessed $value
+      && $value->can('get_type')
+      && $value->get_type eq 'timestamp' ) {
       # resolve the effective wire format, most-specific first:
       #   member timestampFormat -> shape timestampFormat -> location default
       #   (header=>rfc822, querystring=>iso8601) -> protocol body default
@@ -619,14 +778,162 @@ sub finalize_structure {
         :                                        'iso8601'
       );
 
-      $output->{$member_name} = _format_timestamp( $value->get__value, $format );
+      $output->{$member_name} = _format_timestamp( $value->get__value, $format, );
     }
     else {
-      $output->{$member_name} = blessed $value && $value->can('finalize') ? $value->finalize : $value;
+      my $finalized;
+
+      # A blob used as the HTTP payload is the body itself. Do not
+      # base64-encode it as we do for ordinary modeled blob members.
+      if ( $PROTOCOL
+        && $PROTOCOL =~ /^rest\-(?:xml|json)$/xsm
+        && ( $self->{payload} // $EMPTY ) eq $member
+        && blessed $value
+        && $value->can('get_type')
+        && $value->get_type eq 'blob' ) {
+        $finalized = $value->get__value;
+      }
+      else {
+        $finalized
+          = blessed $value && $value->can('finalize')
+          ? $value->finalize
+          : $value;
+      }
+
+      if ( $members->{$member}->{flattened}
+        && $PROTOCOL
+        && blessed($value)
+        && $value->can('get_type') ) {
+
+        if ( any { $PROTOCOL eq $_ } qw(query ec2) ) {
+          if ( $value->get_type eq 'list' ) {
+            my %indexed;
+
+            foreach my $key ( keys %{$finalized} ) {
+              my ($idx) = $key =~ /\.(\d+)$/xsm;
+
+              next
+                if !defined $idx;
+
+              $indexed{$idx} = $finalized->{$key};
+            }
+
+            $finalized = \%indexed;
+          }
+          elsif ( $value->get_type eq 'map' ) {
+            my %indexed;
+
+            foreach my $key ( keys %{$finalized} ) {
+              my ($idx) = $key =~ /^entry\.(\d+)$/xsm;
+
+              next
+                if !defined $idx;
+
+              $indexed{$idx} = $finalized->{$key};
+            }
+
+            $finalized = \%indexed;
+          }
+        }
+        elsif ( $PROTOCOL eq 'rest-xml' ) {
+          if ( $value->get_type eq 'list' ) {
+            my $member_name = $value->get_member->{locationName} // 'member';
+
+            $finalized = $finalized->{$member_name};
+          }
+          elsif ( $value->get_type eq 'map' ) {
+            $finalized = $finalized->{entry};
+          }
+        }
+
+      }
+
+      my $namespace = $members->{$member}->{xmlNamespace};
+
+      if ( $PROTOCOL
+        && $PROTOCOL eq 'rest-xml' ) {
+        $finalized = _apply_local_xml_namespace( $finalized, $namespace, );
+      }
+
+      $output->{$member_name} = $finalized;
     }
   }
 
   return $output;
+}
+
+########################################################################
+sub _xml_namespace_attributes {
+########################################################################
+  my ($namespace) = @_;
+
+  return
+    if !$namespace;
+
+  my ( $uri, $prefix );
+
+  if ( ref $namespace
+    && reftype($namespace) eq 'HASH' ) {
+    $uri    = $namespace->{uri};
+    $prefix = $namespace->{prefix};
+  }
+  else {
+    $uri = $namespace;
+  }
+
+  return
+    if !defined $uri
+    || $uri eq $EMPTY;
+
+  my $attribute
+    = $prefix
+    ? sprintf 'xmlns:%s', $prefix
+    : 'xmlns';
+
+  return { $attribute => $uri, };
+}
+
+########################################################################
+sub _apply_local_xml_namespace {
+########################################################################
+  my ( $value, $namespace ) = @_;
+
+  return $value
+    if !defined $namespace;
+
+  if ( ref $namespace
+    && reftype($namespace) eq 'HASH' ) {
+    return $value
+      if !$namespace->{prefix};
+  }
+
+  return _apply_xml_namespace( $value, $namespace, );
+}
+
+########################################################################
+sub _apply_xml_namespace {
+########################################################################
+  my ( $value, $namespace ) = @_;
+
+  my $attributes = _xml_namespace_attributes($namespace);
+
+  return $value
+    if !$attributes;
+
+  if ( ref $value
+    && reftype($value) eq 'HASH' ) {
+    $value->{_attr} //= {};
+
+    @{ $value->{_attr} }{ keys %{$attributes} }
+      = values %{$attributes};
+
+    return $value;
+  }
+
+  return {
+    _attr => $attributes,
+    _text => $value,
+  };
 }
 
 1;

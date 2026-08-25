@@ -112,3 +112,5 @@ install: $(TARBALL)
 # TODO: relocation module-names.json to share/
 clean-local::
 	$(NO_ECHO)rm -rf workdir *.sig
+
+include corpus-test.mk

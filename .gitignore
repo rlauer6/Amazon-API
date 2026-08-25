@@ -1,3 +1,6 @@
+corpus-test/input
+corpus-test/output
+corpus-test/test.log
 workdir/
 **/*.checked
 **/*.sh

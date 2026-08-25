@@ -8,7 +8,8 @@
     ./lib/Amazon/API/HTTP/UserAgent.pm \
     ./lib/Amazon/API/NullLogger.pm \
     ./lib/Amazon/API/Role/Botocore.pm \
-    ./lib/Amazon/API/Signature4.pm
+    ./lib/Amazon/API/Signature4.pm \
+    ./lib/Amazon/API/XML/Simple.pm
 
 # ./lib/Amazon/API/Botocore/Shape.pm.in
 ./lib/Amazon/API/Botocore/Shape.pm: \
@@ -33,6 +34,10 @@
     ./lib/Amazon/API/Role/Botocore.pm \
     ./lib/Amazon/API/Role/ModuleNames.pm \
     ./lib/Amazon/API/Role/Services.pm
+
+# ./lib/Amazon/API/Error.pm.in
+./lib/Amazon/API/Error.pm: \
+    ./lib/Amazon/API/XML/Simple.pm
 
 # ./lib/Amazon/API/HTTP/UserAgent.pm.in
 ./lib/Amazon/API/HTTP/UserAgent.pm: \

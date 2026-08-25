@@ -13,6 +13,8 @@ use English qw(-no_match_vars);
 use List::Util qw( pairs any uniq );
 use Readonly;
 use Scalar::Util qw(reftype blessed );
+use JSON::PP;
+use Time::Local qw(timegm);
 
 our @EXPORT_OK = qw(
   $SHAPE_NAME_TEMPLATE
@@ -29,6 +31,7 @@ our @EXPORT_OK = qw(
   is_regexp
   is_scalar
   param_n
+  parse_timestamp
   query_param_n
   register_service_shapes
   require_class
@@ -402,6 +405,10 @@ sub query_param_n {
       if !ref $message;
   }
 
+  if ( JSON::PP::is_bool($message) ) {
+    return sprintf '%s=%s', $prefix, $message ? 'true' : 'false';
+  }
+
   my @param_n;
 
   if ( ref $message ) {
@@ -434,6 +441,87 @@ sub create_shape_name {
   my ( $name, $service ) = @_;
 
   return sprintf $SHAPE_NAME_TEMPLATE, $service, $name;
+}
+
+########################################################################
+sub parse_timestamp {
+########################################################################
+  my ($value) = @_;
+
+  return
+    if !defined $value;
+
+  return $value + 0
+    if $value =~ /^-?\d+(?:\.\d+)?$/xsm;
+
+  if (
+    $value =~ m{
+      ^
+      (\d{4})-(\d{2})-(\d{2})
+      T
+      (\d{2}):(\d{2}):(\d{2})
+      (?:\.(\d+))?
+      (Z|[+-]\d{2}:\d{2})
+      $
+    }xsm
+  ) {
+    my ( $year, $month, $day, $hour, $minute, $second, $fraction, $zone ) = ( $1, $2, $3, $4, $5, $6, $7, $8 );
+
+    my $epoch = timegm( $second, $minute, $hour, $day, $month - 1, $year, );
+
+    if ( $zone ne 'Z' ) {
+      my ( $sign, $zone_hour, $zone_minute ) = $zone =~ /^([+-])(\d{2}):(\d{2})$/xsm;
+
+      my $offset = ( $zone_hour * 3600 ) + ( $zone_minute * 60 );
+
+      if ( $sign eq q{+} ) {
+        $epoch -= $offset;
+      }
+      else {
+        $epoch += $offset;
+      }
+    }
+
+    if ( defined $fraction ) {
+      $epoch += sprintf '0.%s', $fraction;
+    }
+
+    return $epoch;
+  }
+
+  if (
+    $value =~ m{
+      ^
+      \w{3},\s+
+      (\d{2})\s+
+      (\w{3})\s+
+      (\d{4})\s+
+      (\d{2}):(\d{2}):(\d{2})\s+
+      GMT
+      $
+    }xsm
+  ) {
+    my ( $day, $month_name, $year, $hour, $minute, $second ) = ( $1, $2, $3, $4, $5, $6 );
+
+    my %months = (
+      Jan => 0,
+      Feb => 1,
+      Mar => 2,
+      Apr => 3,
+      May => 4,
+      Jun => 5,
+      Jul => 6,
+      Aug => 7,
+      Sep => 8,
+      Oct => 9,
+      Nov => 10,
+      Dec => 11,
+    );
+
+    return timegm( $second, $minute, $hour, $day, $months{$month_name}, $year, );
+  }
+
+  return $value;
 }
 
 1;

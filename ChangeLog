@@ -1,3 +1,93 @@
+Tue Aug 25 05:03:42 2026  Rob Lauer  <rclauer@gmail.com>
+
+	[2.6.1]:
+	* VERSION: bump
+	* release-notes: updated
+	* release-notes/release-notes-2.6.1.md: new
+	* corpus-test.mk: new
+	* project.mk: include above
+	* corpus-test/t/ec2.t: new
+	* corpus-test/t/error-ec2.t: new
+	* corpus-test/t/error-json.t: new
+	* corpus-test/t/error-query.t: new
+	* corpus-test/t/error-rest-json.t: new
+	* corpus-test/t/error-rest-xml.t: new
+	* corpus-test/t/json.t: new
+	* corpus-test/t/output-ec2.t: new
+	* corpus-test/t/output-json.t: new
+	* corpus-test/t/output-query.t: new
+	* corpus-test/t/output-rest-json.t: new
+	* corpus-test/t/output-rest-xml.t: new
+	* corpus-test/t/query.t: new
+	* corpus-test/t/rest-json.t: new
+	* corpus-test/t/rest-xml.t: new
+	* requires
+	- +Data::UUID, +URI::Escape
+	- -XML::Simple, +XML::SAX, +XML::NamespaceSupport (embedded XML::Simple in Amazon::API::XML::Simple)
+	* cpanfile: likewise
+	* suggests: +XML::Parser (Amazon::API::XML::Simple)
+	* deps.mk: generated
+	* lib/Amazon/API.pm.in
+	- import parse_timestamp
+	(choose): refactored to return list or scalar result
+	(decode_response)
+	- multiple fixes for Botocore corpus test alignment
+	- use Amazon::API::XML::Simple to patch whitespace issue
+	(is_param_type)
+	- refactored
+	- return $parma when no location value at locationName
+	(init_botocore_request)
+	- return [] when no input object for query, ec2
+	- return undef when protocol is 'rest-json'
+	- return {} for all others
+	- setup header parameters correctly
+	(_resolve_request_content)
+	- multiple protocol specific fixes
+	(serialize_content): likewise
+	(create_urlencode_content)
+	- split fix
+	- use uri_escape_utf8 instead of url_encode
+	(_to_xml)
+	- fixes for proper attribute handling
+	* lib/Amazon/API/Botocore/Shape.pm.in
+	+ documernt, xmlNamespace attributes
+	(init_structure)
+	- add idempotencyToken if needed
+	(_init_value)
+	- set raw value if document
+	- handle 'float' type
+	(get_shape_type)
+	- return SCALAR for document type
+	(finalize)
+	- hadndle Nan -Infinity Infinity
+	- fix booleans
+	(finalize_map)
+	- multiple protocol specific fixes
+	(finalize_list): likewise
+	(finalize_structure): likewise
+	* lib/Amazon/API/Botocore/Shape/Serializer.pm.in
+	(_serialize_structure)
+	- multiple protocol specific fixes
+	(_serialize_list): likewise
+	(serlialize)
+	- accept two new parameter: payload, flattened
+	- multiple protocol specific fixes
+	- handle floats
+	- return $EMPTY when blob exists but is not defined
+	- return raw data when from payload when streaming
+	* lib/Amazon/API/Botocore/Shape/Utils.pm.in
+	(parse_timestamp): new
+	(query_param_n)
+	- boolean fix
+	* lib/Amazon/API/Error.pm.in
+	- use Amazon::API::XML::Simple for consistency
+	* t/01-urlencode.t
+	- add test for UTF8 strings
+	* t/07-query_param_n.t
+	- add test for present-but-empty
+	* test-requires: +JSON::PP
+	* lib/Amazon/API/XML/Simple.pm.in: new
+
 Thu Aug 20 14:07:09 2026  Rob Lauer  <rclauer@gmail.com>
 
 	[2.6.0]:

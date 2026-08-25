@@ -16,10 +16,11 @@ use Amazon::Credentials;
 use Amazon::API::Botocore::Shape;
 use Amazon::API::Botocore::Shape::Serializer;
 use Amazon::API::Botocore::Shape::Utils qw(
-  require_class
-  require_shape
   create_module_name
   get_service_from_class
+  parse_timestamp
+  require_class
+  require_shape
 );
 
 use Carp;
@@ -30,7 +31,8 @@ use JSON qw(decode_json encode_json);
 use List::Util qw(any all pairs none);
 use Readonly;
 use Scalar::Util qw( reftype blessed );
-use URL::Encode qw(url_encode);
+use Text::ParseWords qw(parse_line);
+use URI::Escape qw(uri_escape_utf8);
 
 Readonly::Scalar my $DEFAULT_REGION   => 'us-east-1';
 Readonly::Scalar my $REGIONAL_URL_FMT => '%s://%s.%s.amazonaws.com';
@@ -107,8 +109,22 @@ use parent qw( Exporter Class::Accessor::Fast);
 our @REQUIRED_KEYS = qw( aws_access_key_id aws_secret_access_key );
 
 ########################################################################
-sub choose(&) { return $_[0]->(); } ## no critic
+sub choose(&) { ## no critic
 ########################################################################
+  my $code = shift;
+
+  # Pass the correct context down to the block
+  if (wantarray) {
+    return $code->();
+  }
+  elsif ( defined wantarray ) {
+    return scalar $code->();
+  }
+  else {
+    $code->();
+    return;
+  }
+}
 
 ########################################################################
 sub new {
@@ -219,17 +235,19 @@ sub decode_response {
 
   my $content = $response->content;
 
+  my $has_response_content = defined $content && length $content;
+
   my $content_type = $response->content_type;
 
   # this is expected to fail if !$self->is_botocore_api
   my ( $protocol, $botocore_action )
-    = eval { return ( $self->get_botocore_metadata->{protocol}, $self->get_botocore_action ); };
+    = eval { return ( $self->get_botocore_metadata->{protocol}, $self->get_botocore_action, ); };
 
   $self->get_logger->trace(
     sub {
       return Dumper(
         [ protocol         => $protocol,
-          response_content => $content
+          response_content => $content,
         ]
       );
     }
@@ -237,14 +255,16 @@ sub decode_response {
 
   my $decoded_content;
 
-  if ($content) {
-
+  if ($has_response_content) {
     $decoded_content = eval {
       if ( $content_type =~ /json/xmsi ) {
-        decode_json($content);
+        return decode_json($content);
       }
       elsif ( $content_type =~ /xml/xmsi ) {
-        require XML::Simple;
+        # Use the local XML::Simple-compatible parser. It preserves
+        # whitespace-only character data when NormaliseSpace is disabled,
+        # which upstream XML::Simple 2.25 does not.
+        require Amazon::API::XML::Simple;
 
         ################################################################
         # Maddening interpretation of XML output from these ass hats (-:|3
@@ -261,51 +281,143 @@ sub decode_response {
         # some cases making it difficult to fix legacy mistakes in
         # these APIs.
         ################################################################
-        XML::Simple::XMLin(
+
+        return Amazon::API::XML::Simple::XMLin(
           $content,
-          KeepRoot      => $TRUE,
-          SuppressEmpty => $FALSE,
-          ForceContent  => $self->is_botocore_api && $botocore_action->{output},
-          ForceArray    => ['item'],
-          #          $self->get_force_array ? ( ForceArray => ['item'] ) : ()
+          KeepRoot       => $TRUE,
+          NormaliseSpace => 0,
+          SuppressEmpty  => $FALSE,
+          ForceContent   => $self->is_botocore_api && $botocore_action->{output},
+          ForceArray     => ['item'],
         );
+
       }
-    }; ## scandeps: requires
+
+      return;
+    };
 
     # disregard content_type (it might be misleading?)
     # this is almost certainly going to be a problem somewhere...
-    if ( !$decoded_content || $EVAL_ERROR ) {
-
+    if ( !defined $decoded_content || $EVAL_ERROR ) {
       $self->get_logger->warn("unable to decode content: $EVAL_ERROR");
       $self->get_logger->warn('Trying again using JSON and XML decoders.');
 
       $decoded_content = eval { return decode_json($content); };
 
-      if ( !$decoded_content || $EVAL_ERROR ) {
-        require XML::Simple;
+      if ( !defined $decoded_content || $EVAL_ERROR ) {
+        require Amazon::API::XML::Simple;
+
         $decoded_content = eval {
-          return XML::Simple::XMLin(
+          return Amazon::API::XML::Simple::XMLin(
             $content,
-            SuppressEmpty => 0,  # $protocol eq 'ec2' ? $FALSE : $TRUE,
-            $self->get_force_array ? ( ForceArray => ['item'] ) : ()
+            NormaliseSpace => 0,
+            SuppressEmpty  => $FALSE,
+            $self->get_force_array
+            ? ( ForceArray => ['item'] )
+            : (),
           );
         };
       }
     }
   }
 
-  $content = $decoded_content || $content;
+  $content = defined $decoded_content ? $decoded_content : $content;
 
-  $self->get_logger->debug( sub { return Dumper( [ 'content' => $content ] ) } );
+  $self->get_logger->debug(
+    sub {
+      return Dumper( [ content => $content ] );
+    }
+  );
 
-  # we'll only have a "serializer" if this is a Botocore generated API
+  # we'll only have a serializer if this is a Botocore generated API
   my $serializer = $self->get_serializer;
-  $serializer->set_protocol($protocol);
+
+  if ($serializer) {
+    $serializer->set_protocol($protocol);
+  }
+
+  my $output = $botocore_action ? $botocore_action->{output} : undef;
+
+  my $output_shape = $output ? $self->get_botocore_shapes->{ $output->{shape} } : undef;
+
+  my $is_json_protocol = $protocol && any { $protocol eq $_ } qw(json rest-json );
+
+  return {}
+    if $is_json_protocol && !$output;
+
+  return {}
+    if $protocol
+    && ( any { $protocol eq $_ } qw{rest-xml query} )
+    && !$output
+    && !$has_response_content;
+
+  # JSON-family protocols model an empty response body as an empty
+  # structure when the operation has a structured output.
+  if ( $is_json_protocol
+    && $output_shape
+    && !$has_response_content
+    && ( $output_shape->{type} // q{} ) eq 'structure' ) {
+    $content = {};
+  }
+
+  # In rest-json a payload response body is not the entire output
+  # structure. It is the value of the member named by the output
+  # shape's payload trait. Wrap it before serializing the output
+  # structure so scalar payloads do not hit the early scalar return.
+  if ( $protocol
+    && $protocol eq 'rest-json'
+    && $output_shape
+    && $output_shape->{payload}
+    && $has_response_content ) {
+    my $payload = $output_shape->{payload};
+
+    $content = { $payload => $content, };
+  }
+
+  my $xml_empty_output;
+
+  if ( $protocol
+    && ( any { $protocol eq $_ } qw(rest-xml ec2 query) )
+    && !$has_response_content
+    && $output_shape
+    && ( $output_shape->{type} // $EMPTY ) eq 'structure' ) {
+    $content          = {};
+    $xml_empty_output = $TRUE;
+  }
+
+  if ( $protocol
+    && $protocol eq 'rest-xml'
+    && $output_shape
+    && $output_shape->{payload}
+    && $has_response_content ) {
+
+    my $payload = $output_shape->{payload};
+
+    my $member = $output_shape->{members}->{$payload};
+
+    if ($member) {
+      my $location_name = $member->{locationName} // $payload;
+
+      if ( ref $content
+        && reftype($content) eq 'HASH' ) {
+        my $payload_shape_name = $member->{shape};
+
+        my $payload_shape = $self->get_botocore_shapes->{$payload_shape_name};
+
+        my $root_name = $payload_shape->{locationName} // $payload_shape_name;
+
+        if ( exists $content->{$root_name} ) {
+          $content = { $location_name => $content->{$root_name}, };
+        }
+      }
+      else {
+        $content = { $location_name => $content, };
+      }
+    }
+  }
 
   return $content
     if !ref $content || !$serializer || !$serialize;
-
-  my $output = $botocore_action->{output};
 
   return $decoded_content
     if !$output;
@@ -314,7 +426,20 @@ sub decode_response {
 
   if ( $protocol && $protocol eq 'query' && ref $content eq 'HASH' ) {
     my ($root_key) = grep {/Response$/xsm} keys %{$content};
-    $content = $content->{$root_key} if $root_key;
+
+    if ($root_key) {
+      $content = $content->{$root_key};
+    }
+
+    if ( !$output->{resultWrapper}
+      && ref $content
+      && reftype($content) eq 'HASH' ) {
+      my ($result_wrapper) = grep {/Result$/xsm} keys %{$content};
+
+      if ($result_wrapper) {
+        $content = $content->{$result_wrapper};
+      }
+    }
   }
 
   if ( $output->{resultWrapper} ) {
@@ -325,7 +450,7 @@ sub decode_response {
     sub {
       return Dumper(
         [ content                => $content,
-          botocore_action_output => $output
+          botocore_action_output => $output,
         ]
       );
     }
@@ -333,47 +458,170 @@ sub decode_response {
 
   $serializer->set_logger( $self->get_logger );
 
+  my $exists = choose {
+    return $TRUE
+      if $is_json_protocol && ref $content;
+
+    return $xml_empty_output
+      if defined $xml_empty_output;
+
+    return;
+  };
+
   $content = eval {
-    $serializer->serialize(
+    return $serializer->serialize(
       service => get_service_from_class( ref $self ),
       shape   => $output->{shape},
-      data    => $content
+      data    => $content,
+      exists  => $exists,
     );
   };
 
   # ...but this isn't necessarily where things STB
-  if ( !$content || $EVAL_ERROR ) {
+  if ( !defined $content || $EVAL_ERROR ) {
     if ( $self->get_raise_serialization_errors ) {
       die $EVAL_ERROR;
     }
     elsif ($EVAL_ERROR) {
-      carp "error serializing content: please report this error\n$EVAL_ERROR";
+      carp "ERROR: serializing error: please report this error\n$EVAL_ERROR";
       $content = $orig_content;
     }
   }
 
-  # header-located output members (e.g. GetDistributionConfig's ETag) never
-  # appear in the body - they arrive only as HTTP response headers. Lift them
-  # out of the response and into the result, keyed by member name, so callers
-  # can read $result->{ETag} to feed the next IfMatch. This is the receive-side
-  # mirror of the send-side header extraction in init_botocore_request.
-  my $output_members = $self->get_botocore_shapes->{ $output->{shape} }->{members} // {};
+  # Header-located output members never appear in the body. Lift them
+  # into the modeled result. For now these remain raw HTTP values;
+  # modeled header deserialization is handled separately.
+  my $output_members = $output_shape->{members} // {};
 
   if ( ref $content eq 'HASH' ) {
     foreach my $member ( keys %{$output_members} ) {
       my $spec     = $output_members->{$member};
       my $location = $spec->{location} // $EMPTY;
 
+      my $shape = $self->get_botocore_shapes->{ $spec->{shape} };
+
       if ( $location eq 'header' ) {
         my $value = $response->header( $spec->{locationName} // $member );
 
         if ( defined $value ) {
-          $content->{$member} = $value;
+          if ($is_json_protocol) {
+            my $shape = $self->get_botocore_shapes->{ $spec->{shape} };
+
+            my $data = $value;
+
+            if ( $shape && ( $shape->{type} // $EMPTY ) eq 'list' ) {
+              my $member_shape = $self->get_botocore_shapes->{ $shape->{member}->{shape} };
+
+              if ( $member_shape && ( $member_shape->{type} // $EMPTY ) eq 'timestamp' ) {
+                $data = [ split /(?<=GMT),\s*(?=[A-Z][a-z]{2},)/xsm, $value ];
+              }
+              else {
+                $data = [ parse_line( qr/\s*,\s*/, $FALSE, $value, ) ];
+              }
+            }
+
+            my $serialized_data = $serializer->serialize(
+              service => get_service_from_class( ref $self ),
+              shape   => $spec->{shape},
+              data    => $data,
+              exists  => $TRUE,
+            );
+
+            if ( $is_json_protocol && $spec->{jsonvalue} && defined $serialized_data ) {
+              require MIME::Base64;
+
+              $serialized_data = MIME::Base64::decode_base64($serialized_data);
+            }
+
+            $content->{$member} = $serialized_data;
+          }
+          elsif ( $protocol && $protocol eq 'rest-xml' ) {
+            my $type = $shape->{type} // $EMPTY;
+
+            if ( $type eq 'list' ) {
+              my $member_shape = $self->get_botocore_shapes->{ $shape->{member}->{shape} };
+
+              my $data = choose {
+                return [ split /(?<=GMT),\s*(?=[A-Z][a-z]{2},)/xsm, $value ]
+                  if $member_shape && ( $member_shape->{type} // $EMPTY ) eq 'timestamp';
+
+                return [ parse_line( qr/\s*,\s*/, $FALSE, $value, ) ];
+              };
+
+              $content->{$member} = $serializer->serialize(
+                service => get_service_from_class( ref $self ),
+                shape   => $spec->{shape},
+                data    => $data,
+                exists  => $TRUE,
+              );
+            }
+            elsif ( $type eq 'boolean' ) {
+              if ( $value eq 'true' ) {
+                $content->{$member} = JSON::true;
+              }
+              elsif ( $value eq 'false' ) {
+                $content->{$member} = JSON::false;
+              }
+              else {
+                $content->{$member} = $value;
+              }
+            }
+            elsif ( $type eq 'timestamp' ) {
+              $content->{$member} = parse_timestamp($value);
+            }
+            else {
+              $content->{$member} = $value;
+            }
+          }
+          else {
+            $content->{$member} = $value;
+          }
+        }
+      }
+      elsif ( $location eq 'headers' ) {
+        my $prefix = $spec->{locationName} // $EMPTY;
+
+        my $headers = $response->headers;
+
+        my %values;
+        my $header_prefix = lc $prefix;
+
+        foreach my $name ( $headers->header_field_names ) {
+          my $header_name = lc $name;
+
+          next
+            if length $header_prefix
+            && index( $header_name, $header_prefix ) != 0;
+
+          my $key
+            = length $header_prefix
+            ? substr( $header_name, length $header_prefix )
+            : $header_name;
+
+          next
+            if $key eq $EMPTY;
+
+          $values{$key} = $response->header($name);
+        }
+
+        if ( keys %values ) {
+          if ($is_json_protocol) {
+            $content->{$member} = $serializer->serialize(
+              service => get_service_from_class( ref $self ),
+              shape   => $spec->{shape},
+              data    => \%values,
+              exists  => $TRUE,
+            );
+          }
+          else {
+            $content->{$member} = \%values;
+          }
+        }
+        elsif ( $protocol && $protocol eq 'rest-xml' ) {
+          $content->{$member} = {};
         }
       }
       elsif ( $location eq 'statusCode' ) {
-        # the HTTP status is a data member for some rest-json outputs and,
-        # like a header member, never appears in the body.
         $content->{$member} = $response->code;
       }
     }
@@ -407,10 +655,8 @@ sub is_botocore_shape {
   return $shape_name;
 }
 
-# returns the 'locationName' of the element or '' locationName for a
-# given parameter type (uri, querystring, etc)
-#
-# determines where to find the parameter in the input payload
+# returns the wire name for a member at the requested location;
+# locationName overrides the modeled member name
 
 ########################################################################
 sub is_param_type {
@@ -436,7 +682,10 @@ sub is_param_type {
     }
   );
 
-  return ( $location && $location eq $type ) ? $member->{locationName} : $EMPTY;
+  return $EMPTY
+    if !$location || $location ne $type;
+
+  return $member->{locationName} // $param;
 }
 
 ########################################################################
@@ -565,6 +814,19 @@ sub init_botocore_request {
   );
 
   my $input = $botocore_operations->{input};
+
+  if ( !$input ) {
+    $self->set_http_method($method);
+
+    return []
+      if $protocol eq 'query'
+      || $protocol eq 'ec2';
+
+    return undef ## no critic
+      if $protocol eq 'rest-json';
+
+    return {};
+  }
 
   my $shape = $input->{shape};
 
@@ -756,11 +1018,45 @@ sub init_botocore_request {
         my %header_parameters;
 
         foreach my $p ( keys %{$shape_parameters} ) {
-          if ( my $header_name = $self->is_param_type( $request_shape_name, $p, 'header' ) ) {
+          my $header_name = $self->is_param_type( $request_shape_name, $p, 'header', );
+
+          if ($header_name) {
             my $val = $shape_parameters->{$p};
 
             if ( defined $val ) {
               $header_parameters{$header_name} = $val;
+            }
+
+            delete $shape_parameters->{$p};
+
+            next;
+          }
+
+          my $header_prefix = $self->is_param_type( $request_shape_name, $p, 'headers', );
+
+          if ($header_prefix) {
+            my $val = $shape_parameters->{$p};
+
+            if ( ref $val
+              && reftype($val) eq 'HASH'
+              && exists $val->{entry} ) {
+              foreach my $entry ( @{ $val->{entry} // [] } ) {
+                next
+                  if ref $entry ne 'HASH';
+
+                my $key   = $entry->{key};
+                my $value = $entry->{value};
+
+                next
+                  if !defined $key;
+
+                my $name
+                  = sprintf '%s%s',
+                  $header_prefix,
+                  $key;
+
+                $header_parameters{$name} = defined $value ? $value : $EMPTY;
+              }
             }
 
             delete $shape_parameters->{$p};
@@ -820,6 +1116,151 @@ sub init_botocore_request {
 }
 
 ########################################################################
+sub _resolve_request_content {
+########################################################################
+  my ( $self, $request_shape_name, $protocol, $method, $parameters ) = @_;
+
+  my $content;
+
+  if ( $protocol eq 'rest-json'
+    && !$request_shape_name ) {
+    return undef; ## no critic
+  }
+
+  if ( $request_shape_name
+    && $protocol =~ /rest\-(?:json|xml)/xsm ) {
+    my $inner = $parameters->{$request_shape_name};
+
+    my $shape_def = $self->get_botocore_shapes->{$request_shape_name} // {};
+
+    my $payload_member = $shape_def->{payload};
+
+    if ( !$inner
+      || !keys %{$inner} ) {
+      if ( $protocol eq 'rest-json' ) {
+        if ($payload_member) {
+          my $member = $shape_def->{members}->{$payload_member} // {};
+
+          my $payload_shape_name = $member->{shape};
+
+          my $payload_shape
+            = defined $payload_shape_name
+            ? $self->get_botocore_shapes->{$payload_shape_name} // {}
+            : {};
+
+          my $payload_type = $payload_shape->{type} // $EMPTY;
+
+          $content
+            = ( $payload_type eq 'structure' && !$payload_shape->{union} )
+            ? {}
+            : undef;
+        }
+        else {
+          my $members = $shape_def->{members} // {};
+
+          my $has_modeled_body = any {
+            my $member = $members->{$_};
+
+            my $location = $member->{location} // $EMPTY;
+
+            !$location
+              && !$member->{hostLabel};
+            }
+            keys %{$members};
+
+          $content
+            = $has_modeled_body
+            ? {}
+            : undef;
+        }
+      }
+      else {
+        $content = undef;
+      }
+    }
+    elsif ($payload_member) {
+      my $member = $shape_def->{members}->{$payload_member} // {};
+
+      my $member_name = $member->{locationName} // $payload_member;
+
+      my $payload = $inner->{$member_name};
+
+      if ( $protocol eq 'rest-xml' ) {
+        my $payload_shape_name = $member->{shape};
+
+        my $payload_shape
+          = defined $payload_shape_name
+          ? $self->get_botocore_shapes->{$payload_shape_name} // {}
+          : {};
+
+        my $payload_type = $payload_shape->{type} // $EMPTY;
+
+        if ( !$payload_shape_name ) {
+          $content = { $member_name => $payload, };
+        }
+        elsif ( $payload_type eq 'structure'
+          || $payload_type eq 'union' ) {
+          my $root_name
+            = ( $member->{locationName} && $member->{locationName} ne $payload_member )
+            ? $member->{locationName}
+            : $payload_shape->{locationName} // $payload_shape_name;
+
+          my $namespace = $payload_shape->{xmlNamespace};
+
+          if ($namespace) {
+            if ( ref $namespace
+              && reftype($namespace) eq 'HASH' ) {
+              my $uri = $namespace->{uri};
+
+              my $prefix = $namespace->{prefix};
+
+              if ( defined $uri ) {
+                my $attribute
+                  = $prefix
+                  ? sprintf 'xmlns:%s', $prefix
+                  : 'xmlns';
+
+                $payload->{_attr}->{$attribute} = $uri;
+              }
+            }
+            else {
+              $payload->{_attr}->{xmlns} = $namespace;
+            }
+          }
+
+          $content = { $root_name => $payload, };
+        }
+        else {
+          $content = $payload;
+        }
+      }
+      else {
+        $content = $payload;
+      }
+    }
+    elsif ( $protocol eq 'rest-xml' ) {
+      my $root_name = $shape_def->{locationName} // $request_shape_name;
+
+      $content = { $root_name => $inner, };
+    }
+    else {
+      $content = $inner;
+    }
+  }
+  else {
+    $content = $parameters;
+  }
+
+  if ( $protocol !~ /rest\-(?:json|xml)/xsm
+    && $method ne 'POST'
+    && !keys %{$parameters} ) {
+    $content = undef;
+  }
+
+  return $content;
+}
+
+########################################################################
 # namespaces may be buried a bit in the members specfication of
 # request objects or can be part of the specification for the request
 # method itself (cloudfront.CreateInvalidationBatch)
@@ -839,74 +1280,39 @@ sub init_botocore_request {
 #   - rest-json            : body is the inner members       -> inner as-is
 #   - json / query / ec2   : body is the flat parameter hash -> \%parameters
 #   - non-POST, no params  : no body                          -> undef
-########################################################################
-sub _resolve_request_content {
-########################################################################
-  my ( $self, $request_shape_name, $protocol, $method, $parameters ) = @_;
-
-  my $content;
-
-  if ( $request_shape_name && $protocol =~ /rest\-(json|xml)/xsm ) {
-    my $inner = $parameters->{$request_shape_name};
-
-    if ( !$inner || !keys %{$inner} ) {
-      $content = undef;
-    }
-    else {
-      # A payload-style request (e.g. S3 PutBucketWebsite) puts the body
-      # root at the payload member, so we unwrap to the inner members and
-      # the payload member becomes the single root element. A non-payload
-      # rest-xml request (e.g. Route53 ChangeResourceRecordSets) has no
-      # payload member: the request-shape name itself is the body's root
-      # element and carries the xmlns. We must NOT unwrap past it, or the
-      # namespace (attached as _attr on the wrapper) ends up as a sibling
-      # <_attr> element and we emit two roots -> MalformedInput from AWS.
-      my $shape_def      = $self->get_botocore_shapes->{$request_shape_name} // {};
-      my $payload_member = $shape_def->{payload};
-      if ( $payload_member && $protocol =~ /rest\-xml/xsm ) {
-        # rest-xml WITH a payload member: only that member is the body, and
-        # its locationName is the single root element. Sibling members bound
-        # to the header (IfMatch -> If-Match) or uri (Id) must not serialize
-        # into the body, or generate_xml sees two roots. CreateDistribution
-        # has only the payload member so it already sent a single root;
-        # UpdateDistribution adds IfMatch/Id, which is what hit the guard.
-        my $members   = $shape_def->{members}                       // {};
-        my $root_name = $members->{$payload_member}->{locationName} // $payload_member;
-        $content = { $root_name => $inner->{$payload_member} };
-      }
-      elsif ( $protocol =~ /rest\-xml/xsm ) {
-        my $root_name = $shape_def->{locationName} // $request_shape_name;
-        $content = { $root_name => $inner };
-      }
-      else {
-        $content = $inner;
-      }
-    }
-  }
-  else {
-    # non-rest protocols (plain json, query, ec2): the body is the flat
-    # parameter hash. Dropping this branch sends an empty body to JSON
-    # services -> SerializationException.
-    $content = $parameters;
-  }
-
-  if ( $method ne 'POST' && !keys %{$parameters} ) {
-    $content = undef;
-  }
-
-  return $content;
-}
 
 ########################################################################
 sub find_namespace {
 ########################################################################
   my ( $self, $request, $input ) = @_;
 
-  my ($has_namespace) = grep { defined $_ }
-    map { $request->{members}->{$_}->{xmlNamespace}->{uri} } keys %{ $request->{members} // {} };
+  my $has_namespace;
+
+  foreach my $member ( keys %{ $request->{members} // {} } ) {
+    my $namespace
+      = $request->{members}->{$member}->{xmlNamespace};
+
+    next
+      if !ref $namespace;
+
+    next
+      if reftype($namespace) ne 'HASH';
+
+    $has_namespace = $namespace->{uri};
+
+    last
+      if defined $has_namespace;
+  }
 
   if ( !$has_namespace && $input->{xmlNamespace} ) {
-    $has_namespace = $input->{xmlNamespace}->{uri};
+    my $namespace = $input->{xmlNamespace};
+
+    if ( ref $namespace && reftype($namespace) eq 'HASH' ) {
+      $has_namespace = $namespace->{uri};
+    }
+    else {
+      $has_namespace = $namespace;
+    }
   }
 
   $self->set_namespace($has_namespace);
@@ -945,32 +1351,72 @@ sub serialize_content {
 
   my $protocol = $self->get_api_protocol // $EMPTY;
 
-  # if the API is a query API, url encode parameters
-  if ( $protocol eq 'query' ) {
+  if ( $protocol eq 'query' || $protocol eq 'ec2' ) {
     $parameters //= [];
-    $content = create_urlencoded_content( $parameters, $action, $version );
+
+    $content = create_urlencoded_content( $parameters, $action, $version, );
+  }
+  elsif ( $protocol eq 'rest-json' ) {
+    return
+      if !defined $parameters;
+
+    my $botocore_action = $self->get_botocore_action // {};
+
+    my $input_shape_name = $botocore_action->{input}->{shape};
+
+    my $input_shape
+      = defined $input_shape_name
+      ? $self->get_botocore_shapes->{$input_shape_name} // {}
+      : {};
+
+    my $payload_member = $input_shape->{payload};
+
+    if ($payload_member) {
+      my $member = $input_shape->{members}->{$payload_member} // {};
+
+      my $payload_shape_name = $member->{shape};
+
+      my $payload_shape
+        = defined $payload_shape_name
+        ? $self->get_botocore_shapes->{$payload_shape_name} // {}
+        : {};
+
+      my $payload_type = $payload_shape->{type} // $EMPTY;
+
+      if ( $payload_shape->{document}
+        || $payload_type eq 'structure'
+        || $payload_type eq 'union' ) {
+        $content = encode_json($parameters);
+      }
+      else {
+        $content = $parameters;
+      }
+    }
+    else {
+      delete $parameters->{_attr}
+        if ref $parameters
+        && reftype($parameters) eq 'HASH';
+
+      $content = encode_json($parameters);
+    }
   }
   elsif ( $content_type =~ /json/xsm ) {
-    # JSON services require at least an empty object as the body; a bare
-    # empty string (from undef/empty/non-hash parameters) is rejected with
-    # SerializationException. Floor to {} so we always emit valid JSON.
     $parameters = {}
-      if !$parameters || !ref $parameters || reftype($parameters) ne 'HASH';
+      if !$parameters
+      || !ref $parameters
+      || reftype($parameters) ne 'HASH';
 
     delete $parameters->{_attr};
 
-    # A GET carries no body. Flooring an empty GET to {} here would be
-    # appended to the URI by _set_request_content as a spurious '?{}'
-    # query string, which is then covered by the SigV4 canonical request
-    # -> InvalidSignatureException. Only emit a JSON body when we are
-    # actually sending one; the {} floor remains for body-bearing
-    # methods (POST/PUT), where an empty body must still be valid JSON.
     $content
       = ( $self->get_http_method eq 'GET' && !keys %{$parameters} )
       ? undef
       : encode_json($parameters);
   }
-  elsif ( $parameters && ref $parameters && reftype($parameters) eq 'HASH' && $content_type =~ /xml/xms ) {
+  elsif ( $parameters
+    && ref $parameters
+    && reftype($parameters) eq 'HASH'
+    && $content_type =~ /xml/xms ) {
     return
       if !keys %{$parameters};
 
@@ -1423,15 +1869,22 @@ sub create_urlencoded_content {
   my ( $parameters, $action, $version ) = @_;
 
   my @args;
-
   if ( $parameters && !ref $parameters ) {
-    @args = map { split /=/xsm } split /&/xsm, $parameters;
+    @args = map { split /=/xsm, $_, 2 } split /&/xsm, $parameters;
   }
   elsif ( $parameters && reftype($parameters) eq 'HASH' ) {
     foreach my $key ( keys %{$parameters} ) {
+
       if ( ref $parameters->{$key}
         && reftype( $parameters->{$key} ) eq 'ARRAY' ) {
-        push @args, map { %{$_} } @{ $parameters->{$key} };
+        for my $value ( @{ $parameters->{$key} } ) {
+          if ( ref $value && reftype($value) eq 'HASH' ) {
+            push @args, %{$value};
+          }
+          else {
+            push @args, $key, $value;
+          }
+        }
       }
       else {
         push @args, $key, $parameters->{$key};
@@ -1439,17 +1892,14 @@ sub create_urlencoded_content {
     }
   }
   elsif ( $parameters && reftype($parameters) eq 'ARRAY' ) {
-
-    # if any are refs then they should be hashes...
     if ( any {ref} @{$parameters} ) {
-
-      @args = map { %{$_} } @{$parameters};  # list of hashes
+      @args = map { %{$_} } @{$parameters};
     }
     elsif ( any {/=/xsm} @{$parameters} ) {
-      @args = map { split /=/xsm } @{$parameters};  # formatted list
+      @args = map { split /=/xsm, $_, 2 } @{$parameters};
     }
     else {
-      @args = @{$parameters};  # simple list
+      @args = @{$parameters};
     }
   }
 
@@ -1465,7 +1915,8 @@ sub create_urlencoded_content {
     push @args, 'Version', $version;
   }
 
-  return join $AMPERSAND, map { sprintf '%s=%s', $_->[0], url_encode( $_->[1] ) } pairs @args;
+  return join $AMPERSAND,
+    map { sprintf '%s=%s', uri_escape_utf8( $_->[0] ), uri_escape_utf8( $_->[1] ) } grep { defined $_->[1] } pairs @args;
 }
 
 ########################################################################
@@ -1851,18 +2302,28 @@ sub _to_xml {
 
   # Handle hash references (nested structures)
   elsif ( ref $value eq 'HASH' ) {
-    my %attrs;
+    my %attrs
+      = exists $value->{_attr}
+      ? %{ $value->{_attr} }
+      : ();
 
-    # Handle attributes (if _attr key exists)
-    if ( exists $value->{_attr} ) {
-      %attrs = %{ delete $value->{_attr} };
+    my $element = XML::Twig::Elt->new( $key, \%attrs, );
+
+    if ( exists $value->{_text} ) {
+      $element->set_text(
+        defined $value->{_text}
+        ? $value->{_text}
+        : $EMPTY
+      );
     }
 
-    my $element = XML::Twig::Elt->new( $key, \%attrs );
-
     for my $subkey ( keys %{$value} ) {
+      next
+        if $subkey eq '_attr'
+        || $subkey eq '_text';
+
       $_->paste( last_child => $element )
-        for _to_xml( $subkey, $value->{$subkey} );
+        for _to_xml( $subkey, $value->{$subkey}, );
     }
 
     return $element;

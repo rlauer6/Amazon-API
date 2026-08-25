@@ -1,7 +1,8 @@
+#!/usr/bin/env perl
+
 use strict;
 use warnings;
-
-use Test::More tests => 6;
+use Test::More;
 
 use_ok('Amazon::API');
 
@@ -27,3 +28,9 @@ foreach my $t ( keys %tests ) {
 
   is( $query_string, $expected, $t ) or diag($got_str);
 } ## end foreach my $t ( keys %tests)
+
+is( create_urlencoded_content( { String => " \x{1f639}", } ), 'String=%20%F0%9F%98%B9', 'UTF-8 encodes query-string values', );
+
+done_testing;
+
+1;

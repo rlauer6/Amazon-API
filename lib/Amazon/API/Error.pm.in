@@ -63,8 +63,8 @@ sub _set_message {
   if ($raw_message) {
 
     if ( $self->get_content_type =~ /xml/xmsi ) {
-      require XML::Simple;
-      $message = eval { return XML::Simple::XMLin($raw_message); };
+      require Amazon::API::XML::Simple;
+      $message = eval { return Amazon::API::XML::Simple::XMLin($raw_message); };
     }
     elsif ( $self->get_content_type =~ /json/xmsi ) {
       $message = eval { return decode_json($raw_message); };
@@ -76,8 +76,8 @@ sub _set_message {
 
       if ( !$message || $EVAL_ERROR ) {
         if ( $raw_message =~ /^\s*\</xsm ) {
-          require XML::Simple;
-          $message = eval { return XML::Simple::XMLin($raw_message); };
+          require Amazon::API::XML::Simple;
+          $message = eval { return Amazon::API::XML::Simple::XMLin($raw_message); };
         }
       }
     }

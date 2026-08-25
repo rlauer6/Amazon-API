@@ -6,7 +6,7 @@ use warnings;
 use parent qw(Class::Accessor::Fast);
 
 use Amazon::API::Constants qw(:chars :booleans);
-use Amazon::API::Botocore::Shape::Utils qw(require_shape is_hash is_array);
+use Amazon::API::Botocore::Shape::Utils qw(require_shape is_hash is_array parse_timestamp);
 use Amazon::API::Botocore::Shape;
 
 use Carp;
@@ -62,6 +62,10 @@ sub _serialize_structure {
   foreach my $m ( keys %{$members} ) {
     my $member = $members->{$m};
 
+    my $is_payload = $this->{payload} && $m eq $this->{payload};
+
+    my $is_jsonvalue = $member->{jsonvalue};
+
     my $location_name = $member->{locationName} || $member->{location} || $m;
     next if !exists $data->{$location_name};
 
@@ -86,6 +90,10 @@ sub _serialize_structure {
     );
 
     my $member_data = $data->{$location_name};
+
+    next
+      if $self->get_protocol =~ /^(?:json|rest-json)$/xsm
+      && !defined $member_data;
 
     $self->get_logger->debug(
       sub {
@@ -135,6 +143,12 @@ sub _serialize_structure {
         data    => exists $data->{$location_name} ? $member_data : $data,
         service => $service,
         exists  => exists $data->{$location_name},
+        ( $member->{flattened} ? ( flattened => $TRUE )
+          : ()
+        ),
+        ( $is_payload ? ( payload => $TRUE )
+          : ()
+        ),
       );
 
       $self->get_logger->debug(
@@ -155,11 +169,14 @@ sub _serialize_structure {
     next if ( !exists $data->{$location_name} ) && !defined $serialized_data;
 
     $result //= {};
+
     if ( $this->{flattened} ) {
       $result->{$m} = $serialized_data;
     }
     else {
-      if ( is_hash($serialized_data)
+      if ( $self->get_protocol !~ /^(?:json|rest-json)$/xsm
+        && $has_location
+        && is_hash($serialized_data)
         && exists $serialized_data->{$location_name} ) {
         $result->{$m} = $serialized_data->{$location_name};
       }
@@ -203,7 +220,8 @@ sub _serialize_list {
     }
   }
 
-  my $list = $location_name ? $data->{$location_name} : $data;
+  my $list = $location_name && ref $data && reftype($data) eq 'HASH' ? $data->{$location_name} : $data;
+
   return [] if defined $list && !ref $list && $list eq $EMPTY;
 
   my $member_shape = $member->{shape};
@@ -332,17 +350,20 @@ sub serialize {
 ########################################################################
   my ( $self, %args ) = @_;
 
-  my ( $shape, $service, $data, $exists ) = @args{qw(shape service data exists)};
+  my ( $shape, $service, $data, $exists, $payload, $flattened ) = @args{qw(shape service data exists payload flattened)};
 
   $service ||= $self->get_service;
+
+  my $protocol = $self->get_protocol;
 
   $self->get_logger->debug(
     sub {
       return Dumper(
-        [ shape   => $shape,
-          data    => $data,
-          service => $service,
-          exists  => $exists,
+        [ shape    => $shape,
+          data     => $data,
+          service  => $service,
+          exists   => $exists,
+          protocol => $protocol,
         ]
       );
     }
@@ -385,7 +406,8 @@ sub serialize {
             ]
           )
         );
-        $data = $data->{$response_wrapper};
+        $data   = $data->{$response_wrapper};
+        $exists = $TRUE;
         if ( exists $data->{$shape} ) {
           $data = $data->{$shape};
         }
@@ -402,6 +424,22 @@ sub serialize {
 
   my $this = $class->new();
   $this->set_logger( $self->get_logger );
+
+  $this->{flattened} = $flattened
+    if defined $flattened;
+
+  return $data
+    if $this->{document};
+
+  # for REST-XML root-name unwrap immediately
+  if (!$exists
+    && $protocol eq 'rest-xml'
+    && $this->{locationName}
+    && ref $data
+    && reftype($data) eq 'HASH'
+    && exists $data->{ $this->{locationName} } ) {
+    $data = $data->{ $this->{locationName} };
+  }
 
   my $type = $this->get_type;
 
@@ -439,6 +477,7 @@ sub serialize {
 
       return $exists ? $EMPTY : $data;
     },
+
     boolean => sub {
 
       if ( ref $data ) {
@@ -451,7 +490,6 @@ sub serialize {
         if !defined $data;
 
       $data //= 0;
-
       if ( any { $data eq $_ } qw( 0 1 true false) ) {
         my $bool_value = {
           '0'     => 0,
@@ -460,9 +498,10 @@ sub serialize {
           'false' => 0,
         }->{$data};
 
-        return $self->get_protocol =~ /^(?:query|ec2)$/xsm
-          ? $bool_value
-          : ( $bool_value ? JSON::true : JSON::false );
+        # Response deserialization always returns modeled boolean values.
+        # Query/EC2 request serialization uses plain 0/1 in Shape.pm because
+        # query-string generation cannot consume blessed JSON booleans.
+        return $bool_value ? JSON::true : JSON::false;
       }
 
       return $data;
@@ -476,15 +515,78 @@ sub serialize {
       return ref $data ? $data->{content} : $data;
     },
 
-    map => sub {
+    float => sub {
+      $data = ref $data ? $data->{content} : $data;
+
       return $data
-        if !$this->{flattened};
+        if defined $data && any { $data eq $_ } qw(NaN Infinity -Infinity);
+
+      return defined $data ? $data * 1.0 : $data;
+    },
+
+    double => sub {
+      $data = ref $data ? $data->{content} : $data;
+
+      return $data
+        if defined $data && any { $data eq $_ } qw(NaN Infinity -Infinity);
+
+      return defined $data ? $data * 1.0 : $data;
+    },
+    map => sub {
+
+      if (
+           ( any { $protocol eq $_ } qw(query ec2 rest-xml) )
+        && $exists
+        && (
+             !defined $data
+          || ( ref $data && reftype($data) eq 'HASH' && !keys %{$data} )
+          || ( ref $data
+            && reftype($data) eq 'HASH'
+            && keys %{$data} == 1
+            && exists $data->{content} )
+        )
+      ) {
+        return {};
+      }
+
+      if ( !$this->{flattened} ) {
+        if ( $protocol =~ /^(?:json|rest-json)$/xsm
+          && ref $data
+          && reftype($data) eq 'HASH' ) {
+          my %result;
+
+          foreach my $key ( keys %{$data} ) {
+            next
+              if !defined $data->{$key};
+
+            $result{$key} = $data->{$key};
+          }
+
+          return \%result;
+        }
+
+        if ( ( any { $protocol eq $_ } qw{query ec2 rest-xml} )
+          && ref $data
+          && reftype($data) eq 'HASH'
+          && exists $data->{entry} ) {
+          $data = $data->{entry};
+        }
+        else {
+          return $data;
+        }
+      }
 
       my $serialize           = {};
       my $key_location_name   = $this->{key}->{locationName};
-      my $key_shape_name      = $this->{key}->{shape};
       my $value_location_name = $this->{value}->{locationName};
-      my $value_shape_name    = $this->{value}->{shape};
+
+      if ( any { $protocol eq $_ } qw(query ec2 rest-xml) ) {
+        $key_location_name   //= 'key';
+        $value_location_name //= 'value';
+      }
+
+      my $key_shape_name   = $this->{key}->{shape};
+      my $value_shape_name = $this->{value}->{shape};
 
       $self->get_logger->debug(
         sub {
@@ -536,7 +638,7 @@ sub serialize {
         if ( $key_location_name || $key_shape_name ) {
           $key = $self->serialize(
             service => $service,
-            data    => $key_location_name ? $item->{$key_location_name}->{content} : $item,
+            data    => $key_location_name ? $item->{$key_location_name} : $item,
             shape   => $key_shape_name,
 
           );
@@ -546,8 +648,9 @@ sub serialize {
 
           $value = $self->serialize(
             service => $service,
-            data    => $value_location_name ? $item->{$value_location_name}->{content} : $item,
+            data    => $value_location_name ? $item->{$value_location_name} : $item,
             shape   => $value_shape_name,
+            exists  => $TRUE,
           );
         }
 
@@ -557,7 +660,7 @@ sub serialize {
         # themselves. This occurs in an API like SQS where the
         # attribute names become the keys but are not specifically
         # called out in the shape.
-        if ( $key && defined $value ) {
+        if ( defined $key && defined $value ) {
           $serialize->{$key} = $value;
         }
         else {
@@ -565,57 +668,30 @@ sub serialize {
         }
       }
 
-      return { $this->{locationName} => $serialize };
+      return $serialize;
     },
     blob => sub {
-      # value blobs arrive base64-encoded and decode back to bytes; streaming
-      # blobs are the raw body and pass through untouched (mirror of the send
-      # side in Amazon::API::Botocore::Shape::finalize).
       if ( ref $data ) {
         $data = $data->{content};
       }
 
+      return $EMPTY
+        if !defined $data && $exists;
+
       return $data
-        if !defined $data || $this->{streaming};
+        if !defined $data || $this->{streaming} || $payload;
 
       require MIME::Base64;
+
       return MIME::Base64::decode_base64($data);
     },
     timestamp => sub {
-      $data = ref $data ? $data->{content} : $data;
+      $data
+        = ref $data
+        ? $data->{content}
+        : $data;
 
-      return
-        if !$data;
-
-      $data =~ s/^(.*)[.]000Z$/$1\+00:00/xsm;
-
-      if ( $data =~ /^[\d.]+$/xsm ) {
-        my $epoch = $data;
-
-        my $nanoseconds;
-
-        ( $epoch, $nanoseconds ) = split /[.]/xsm, $epoch;
-
-        require POSIX;
-        POSIX->import('strftime');
-
-        if ( defined $nanoseconds ) {
-          $data = strftime( '%Y-%m-%dT%H:%M:%S', localtime $epoch );
-          $data .= sprintf '.%03d', $nanoseconds;
-          $data .= strftime( '%z', localtime $epoch );
-        }
-        else {
-          $data = strftime( '%Y-%m-%dT%H:%M:%S%z', localtime $epoch );
-        }
-
-        if ( $data =~ /(\d{4})$/xsm ) {
-          my ( $h, $m ) = unpack 'A2A2', $1;
-          $data =~ s/\d{4}$/$h:$m/xsm;
-        }
-
-      }
-
-      return $data;
+      return parse_timestamp($data);
     },
   );
 
