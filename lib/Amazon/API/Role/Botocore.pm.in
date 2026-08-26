@@ -4,6 +4,7 @@ use strict;
 use warnings;
 
 use Amazon::API::Constants qw($PADDING);
+use Amazon::API::Paginator::Compiler;
 use Amazon::API::Template qw(fetch_template to_template_var render_template);
 
 use Carp;
@@ -204,12 +205,20 @@ sub create_stub {
   my $operations = $self->_strip_documentation( dclone $parameters->{operations} );
   my $shapes     = $self->_strip_documentation( dclone $parameters->{shapes} );
 
+  my $compiler = Amazon::API::Paginator::Compiler->new(
+    operations => $operations,
+    shapes     => $shapes,
+  );
+
+  my $compiled_paginators = $compiler->compile( $parameters->{paginators} );
+
   local $Storable::canonical = $TRUE;
 
   my $meta;
 
   nstore(
-    { metadata            => $parameters->{metadata},
+    { compiled_paginators => $compiled_paginators,
+      metadata            => $parameters->{metadata},
       operations          => $operations,
       shapes              => $shapes,
       paginators          => $parameters->{paginators},
@@ -537,9 +546,9 @@ C<$output_path/Amazon/API/>:
 C<Amazon::API::E<lt>module_nameE<gt>>), rendered from F<stub.pm.tmpl>.
 
 =item * C<E<lt>module_nameE<gt>.api.gz> — a gzipped, canonical L<Storable>
-image of the service metadata (metadata, operations, shapes, paginators
-and their SHA-256 digests) that the runtime loads instead of re-parsing
-Botocore at run time.
+image of the service metadata (metadata, operations, shapes, raw paginators,
+compiled paginators and their SHA-256 digests) that the runtime loads instead
+of re-parsing Botocore at run time.
 
 =back
 

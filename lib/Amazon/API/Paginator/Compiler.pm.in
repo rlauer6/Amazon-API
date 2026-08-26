@@ -1,0 +1,477 @@
+package Amazon::API::Paginator::Compiler;
+
+use strict;
+use warnings;
+
+use parent qw(Class::Accessor::Fast);
+
+use Carp;
+use Data::Dumper;
+use English qw(-no_match_vars);
+use Readonly;
+use Scalar::Util qw(reftype);
+
+our $VERSION = '@PACKAGE_VERSION@'; ## no critic (RequireInterpolationOfMetachars)
+
+Readonly::Hash my %RESULT_VERB_FOR_TYPE => (
+  integer   => 'add',
+  list      => 'append',
+  map       => 'first',
+  string    => 'concat',
+  structure => 'first',
+);
+
+Readonly::Hash my %PAGINATOR_FIELDS => (
+  input_token        => 1,
+  limit_key          => 1,
+  more_results       => 1,
+  non_aggregate_keys => 1,
+  output_token       => 1,
+  result_key         => 1,
+);
+
+Readonly::Hash my %PAGINATOR_ROOT_FIELDS => (
+  pagination => 1,
+  version    => 1,
+);
+
+__PACKAGE__->follow_best_practice;
+__PACKAGE__->mk_accessors(qw(operations shapes));
+
+########################################################################
+sub new {
+########################################################################
+  my ( $class, @options ) = @_;
+
+  my %options = ref $options[0] ? %{ $options[0] } : @options;
+
+  foreach my $key (qw(operations shapes)) {
+    my $value = $options{$key};
+
+    croak "$key is required"
+      if !defined $value;
+
+    croak "$key must be a hash reference"
+      if !ref $value || reftype($value) ne 'HASH';
+  }
+
+  return $class->SUPER::new( \%options );
+}
+
+########################################################################
+sub compile {
+########################################################################
+  my ( $self, $paginators ) = @_;
+
+  return {}
+    if !defined $paginators;
+
+  $self->_check_hash( $paginators, 'paginators' );
+
+  foreach my $field ( keys %{$paginators} ) {
+    croak "unsupported paginator root field: $field"
+      if !$PAGINATOR_ROOT_FIELDS{$field};
+  }
+
+  return {}
+    if !defined $paginators->{pagination};
+
+  $self->_check_hash( $paginators->{pagination}, 'pagination' );
+
+  my %compiled;
+
+  foreach my $action ( sort keys %{ $paginators->{pagination} } ) {
+    $compiled{$action} = $self->_compile_definition( $action, $paginators->{pagination}->{$action}, );
+  }
+
+  return \%compiled;
+}
+
+########################################################################
+sub _compile_definition {
+########################################################################
+  my ( $self, $action, $paginator ) = @_;
+
+  $self->_check_hash( $paginator, "$action paginator" );
+
+  croak "unknown operation for paginator: $action"
+    if !$self->get_operations->{$action};
+
+  foreach my $field ( keys %{$paginator} ) {
+    croak "unsupported paginator field for $action: $field"
+      if !$PAGINATOR_FIELDS{$field};
+  }
+
+  foreach my $field (qw(input_token output_token result_key)) {
+    croak "paginator for $action is missing $field"
+      if !exists $paginator->{$field};
+  }
+
+  my $definition = {
+    results => $self->_compile_results( $action, $paginator->{result_key} ),
+    tokens  => $self->_compile_tokens( $action, $paginator->{input_token}, $paginator->{output_token}, ),
+  };
+
+  if ( exists $paginator->{more_results} ) {
+    $definition->{continuation}
+      = $self->_compile_expression( $action, $paginator->{more_results}, 'more_results' );
+  }
+
+  if ( exists $paginator->{limit_key} ) {
+    $self->_validate_request_member( $action, $paginator->{limit_key}, 'limit_key' );
+    $definition->{limit} = $paginator->{limit_key};
+  }
+
+  if ( exists $paginator->{non_aggregate_keys} ) {
+    $definition->{preserve}
+      = $self->_compile_preserve( $action, $paginator->{non_aggregate_keys} );
+  }
+
+  return $definition;
+}
+
+########################################################################
+sub _compile_tokens {
+########################################################################
+  my ( $self, $action, $input_token, $output_token ) = @_;
+
+  my $input_tokens  = $self->_as_list( $input_token,  "$action input_token" );
+  my $output_tokens = $self->_as_list( $output_token, "$action output_token" );
+
+  croak "paginator for $action has mismatched input/output token counts"
+    if @{$input_tokens} != @{$output_tokens};
+
+  my @tokens;
+
+  foreach my $idx ( 0 .. $#{$input_tokens} ) {
+    my $input = $input_tokens->[$idx];
+
+    $self->_validate_request_member( $action, $input, 'input_token' );
+
+    my $output = $self->_compile_expression( $action, $output_tokens->[$idx], 'output_token', );
+
+    push @tokens,
+      {
+      input  => $input,
+      output => $output,
+      };
+  }
+
+  return \@tokens;
+}
+
+########################################################################
+sub _compile_results {
+########################################################################
+  my ( $self, $action, $result_key ) = @_;
+
+  my $result_keys = $self->_as_list( $result_key, "$action result_key" );
+  my %results;
+
+  foreach my $result_key ( @{$result_keys} ) {
+    my $expression = $self->_compile_expression( $action, $result_key, 'result_key' );
+    my $selectors  = $expression->{selectors};
+
+    croak "result_key for $action must resolve to one selector path: $result_key"
+      if @{$selectors} != 1;
+
+    my $selector = $selectors->[0];
+    my $shape    = $self->_resolve_output_shape( $action, $selector, 'result_key' );
+    my $type     = $shape->{type} // q{};
+    my $verb     = $RESULT_VERB_FOR_TYPE{$type};
+
+    croak "unsupported result type for $action result_key $result_key: $type"
+      if !$verb;
+
+    push @{ $results{$verb} }, $selector;
+  }
+
+  return \%results;
+}
+
+########################################################################
+sub _compile_preserve {
+########################################################################
+  my ( $self, $action, $non_aggregate_keys ) = @_;
+
+  my $keys = $self->_as_list( $non_aggregate_keys, "$action non_aggregate_keys" );
+  my @preserve;
+
+  foreach my $key ( @{$keys} ) {
+    my $expression = $self->_compile_expression( $action, $key, 'non_aggregate_keys' );
+    my $selectors  = $expression->{selectors};
+
+    croak "non_aggregate_key for $action must resolve to one selector path: $key"
+      if @{$selectors} != 1;
+
+    push @preserve, $selectors->[0];
+  }
+
+  return \@preserve;
+}
+
+########################################################################
+sub _compile_expression {
+########################################################################
+  my ( $self, $action, $expression, $field ) = @_;
+
+  croak "$field for $action must be a scalar expression"
+    if ref $expression;
+
+  croak "$field for $action must not be empty"
+    if !defined $expression || $expression eq q{};
+
+  my @paths = split /\s*[|][|]\s*/xsm, $expression, -1;
+  my @selectors;
+
+  foreach my $path (@paths) {
+    croak "unsupported empty selector in $action $field: $expression"
+      if $path eq q{};
+
+    my $selector = $self->_compile_selector_path( $action, $path, $field );
+    $self->_resolve_output_shape( $action, $selector, $field );
+
+    push @selectors, $selector;
+  }
+
+  return { selectors => \@selectors };
+}
+
+########################################################################
+sub _compile_selector_path {
+########################################################################
+  my ( $self, $action, $path, $field ) = @_;
+
+  my @parts = split /[.]/xsm, $path, -1;
+  my @selector;
+
+  foreach my $part (@parts) {
+    croak "unsupported selector in $action $field: $path"
+      if $part eq q{};
+
+    if ( $part !~ /^([^\[\]\s]+)((?:\[-?\d+\])*)$/xsm ) {
+      croak "unsupported selector in $action $field: $path";
+    }
+
+    my $member  = $1;
+    my $indexes = $2;
+
+    push @selector, $member;
+
+    while ( $indexes =~ /\[(-?\d+)\]/xsmg ) {
+      push @selector, { index => 0 + $1 };
+    }
+  }
+
+  return \@selector;
+}
+
+########################################################################
+sub _resolve_output_shape {
+########################################################################
+  my ( $self, $action, $selector, $field ) = @_;
+
+  my $operation = $self->get_operations->{$action};
+  my $shape_ref = $operation->{output};
+
+  croak "operation $action has no output shape for paginator $field"
+    if !$shape_ref || !$shape_ref->{shape};
+
+  my $shape_name = $shape_ref->{shape};
+  my $shape      = $self->_shape( $shape_name, $action, $field );
+
+  foreach my $step ( @{$selector} ) {
+    if ( !ref $step ) {
+      my $type = $shape->{type} // q{};
+
+      croak "cannot select member $step from $type shape $shape_name for $action $field"
+        if $type ne 'structure' && $type ne 'union';
+
+      my $member = $shape->{members} && $shape->{members}->{$step};
+
+      croak "unknown member $step in shape $shape_name for $action $field"
+        if !$member || !$member->{shape};
+
+      $shape_name = $member->{shape};
+      $shape      = $self->_shape( $shape_name, $action, $field );
+      next;
+    }
+
+    croak "invalid selector step for $action $field"
+      if reftype($step) ne 'HASH' || !exists $step->{index} || keys %{$step} != 1;
+
+    croak "cannot index non-list shape $shape_name for $action $field"
+      if ( $shape->{type} // q{} ) ne 'list';
+
+    my $member = $shape->{member};
+
+    croak "list shape $shape_name has no member shape for $action $field"
+      if !$member || !$member->{shape};
+
+    $shape_name = $member->{shape};
+    $shape      = $self->_shape( $shape_name, $action, $field );
+  }
+
+  return $shape;
+}
+
+########################################################################
+sub _validate_request_member {
+########################################################################
+  my ( $self, $action, $member_name, $field ) = @_;
+
+  croak "$field for $action must be a scalar member name"
+    if !defined $member_name || ref $member_name || $member_name eq q{};
+
+  croak "nested request member is not supported for $action $field: $member_name"
+    if $member_name =~ /[.\[\]|]/xsm;
+
+  my $operation = $self->get_operations->{$action};
+  my $shape_ref = $operation->{input};
+
+  croak "operation $action has no input shape for paginator $field"
+    if !$shape_ref || !$shape_ref->{shape};
+
+  my $shape_name = $shape_ref->{shape};
+  my $shape      = $self->_shape( $shape_name, $action, $field );
+  my $type       = $shape->{type} // q{};
+
+  croak "input shape $shape_name for $action is not a structure"
+    if $type ne 'structure';
+
+  my $member = $shape->{members} && $shape->{members}->{$member_name};
+
+  croak "unknown request member $member_name in shape $shape_name for $action $field"
+    if !$member;
+
+  return;
+}
+
+########################################################################
+sub _shape {
+########################################################################
+  my ( $self, $shape_name, $action, $field ) = @_;
+
+  my $shape = $self->get_shapes->{$shape_name};
+
+  croak "unknown shape $shape_name for $action $field"
+    if !$shape;
+
+  return $shape;
+}
+
+########################################################################
+sub _as_list {
+########################################################################
+  my ( $self, $value, $name ) = @_;
+
+  croak "$name is required"
+    if !defined $value;
+
+  if ( !ref $value ) {
+    return [$value];
+  }
+
+  croak "$name must be a scalar or array reference"
+    if reftype($value) ne 'ARRAY';
+
+  return [ @{$value} ];
+}
+
+########################################################################
+sub _check_hash {
+########################################################################
+  my ( $self, $value, $name ) = @_;
+
+  croak "$name must be a hash reference"
+    if !ref $value || reftype($value) ne 'HASH';
+
+  return;
+}
+
+1;
+
+__END__
+
+=pod
+
+=encoding utf8
+
+=head1 NAME
+
+Amazon::API::Paginator::Compiler - compile Botocore paginator metadata
+
+=head1 SYNOPSIS
+
+ my $compiler = Amazon::API::Paginator::Compiler->new(
+   operations => $operations,
+   shapes     => $shapes,
+ );
+
+ my $compiled_paginators = $compiler->compile($paginators);
+
+=head1 DESCRIPTION
+
+C<Amazon::API::Paginator::Compiler> converts the raw Botocore
+C<paginators-1.json> representation into the normalized paginator metadata
+used by C<Amazon::API> at runtime.
+
+The compiler is intentionally strict. It validates paginator fields, token
+cardinality, request members, selector syntax, selector paths, and result
+shape types. Unsupported Botocore constructs fail during service generation
+rather than being deferred to an API invocation.
+
+The compiled metadata contains operation-keyed paginator definitions using
+these fields:
+
+=over 4
+
+=item tokens
+
+An ordered list of request token names and response selector expressions.
+
+=item results
+
+Result selector paths grouped by aggregation verb: C<append>, C<add>,
+C<concat>, or C<first>.
+
+=item continuation
+
+An optional selector expression for explicit continuation. If absent,
+continuation is token-driven.
+
+=item limit
+
+An optional request member containing the per-page limit.
+
+=item preserve
+
+Optional response selector paths whose first-page values are retained in the
+aggregate result.
+
+=back
+
+=head1 METHODS
+
+=head2 new
+
+ my $compiler = Amazon::API::Paginator::Compiler->new(
+   operations => $operations,
+   shapes     => $shapes,
+ );
+
+Both C<operations> and C<shapes> are required Botocore service metadata hash
+references.
+
+=head2 compile
+
+ my $compiled_paginators = $compiler->compile($paginators);
+
+Compiles a raw Botocore paginator metadata object. Services without paginator
+metadata return an empty hash reference.
+
+=head1 AUTHOR
+
+See the Amazon::API distribution.
+
+=cut

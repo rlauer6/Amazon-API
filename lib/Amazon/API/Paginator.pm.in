@@ -1,0 +1,634 @@
+package Amazon::API::Paginator;
+
+use strict;
+use warnings;
+
+use parent qw(Class::Accessor::Fast);
+
+use Carp;
+use Data::Dumper;
+use English qw(-no_match_vars);
+use List::Util qw(any);
+use Scalar::Util qw(blessed reftype);
+
+our $VERSION = '@PACKAGE_VERSION@'; ## no critic (RequireInterpolationOfMetachars)
+
+__PACKAGE__->follow_best_practice;
+__PACKAGE__->mk_accessors(
+  qw(
+    aggregate
+    current_tokens
+    definition
+    _has_next_page
+    page_count
+    parameters
+    preserved
+    previous_tokens
+  )
+);
+
+########################################################################
+sub new {
+########################################################################
+  my ( $class, @options ) = @_;
+
+  my %options = ref $options[0] ? %{ $options[0] } : @options;
+
+  foreach my $key (qw(definition parameters)) {
+    my $value = $options{$key};
+
+    croak "$key is required"
+      if !defined $value;
+
+    croak "$key must be a hash reference"
+      if !ref $value || reftype($value) ne 'HASH';
+  }
+
+  my $definition = $options{definition};
+
+  croak 'definition tokens must be an array reference'
+    if !ref $definition->{tokens}
+    || reftype( $definition->{tokens} ) ne 'ARRAY';
+
+  croak 'definition results must be a hash reference'
+    if !ref $definition->{results}
+    || reftype( $definition->{results} ) ne 'HASH';
+
+  $options{aggregate}       = {};
+  $options{current_tokens}  = undef;
+  $options{_has_next_page}  = 0;
+  $options{page_count}      = 0;
+  $options{parameters}      = { %{ $options{parameters} } };
+  $options{preserved}       = {};
+  $options{previous_tokens} = undef;
+
+  return $class->SUPER::new( \%options );
+}
+
+########################################################################
+sub add_page {
+########################################################################
+  my ( $self, $page ) = @_;
+
+  croak 'page must be a hash reference'
+    if !ref $page || reftype($page) ne 'HASH';
+
+  croak 'cannot add a page after pagination is complete'
+    if $self->get_page_count && !$self->has_next_page;
+
+  my $page_count = $self->get_page_count + 1;
+  $self->set_page_count($page_count);
+
+  $self->_preserve_page($page)
+    if $page_count == 1;
+
+  $self->_aggregate_page($page);
+
+  my $definition = $self->get_definition;
+
+  if ( $definition->{continuation} ) {
+    my $continue = $self->_evaluate_expression( $page, $definition->{continuation}, );
+
+    if ( !$self->_is_truthy($continue) ) {
+      $self->set_previous_tokens( $self->get_current_tokens );
+      $self->set_current_tokens( {} );
+      $self->set__has_next_page(0);
+      return $self;
+    }
+  }
+
+  my $next_tokens = $self->_next_tokens($page);
+  my $has_next    = any { $self->_is_usable_token($_) } values %{$next_tokens};
+
+  if ( !$has_next ) {
+    $self->set_previous_tokens( $self->get_current_tokens );
+    $self->set_current_tokens($next_tokens);
+    $self->set__has_next_page(0);
+    return $self;
+  }
+
+  my $current_tokens = $self->get_current_tokens;
+
+  if ( $current_tokens && $self->_same_token_set( $current_tokens, $next_tokens ) ) {
+    local $Data::Dumper::Sortkeys = 1;
+    local $Data::Dumper::Terse    = 1;
+
+    croak 'the same next token was received twice: ' . Dumper($next_tokens);
+  }
+
+  $self->set_previous_tokens($current_tokens);
+  $self->set_current_tokens($next_tokens);
+  $self->set__has_next_page(1);
+
+  return $self;
+}
+
+########################################################################
+sub has_next_page {
+########################################################################
+  my ($self) = @_;
+
+  return $self->get__has_next_page ? 1 : 0;
+}
+
+########################################################################
+sub next_parameters {
+########################################################################
+  my ($self) = @_;
+
+  return
+    if !$self->has_next_page;
+
+  my %parameters = %{ $self->get_parameters };
+  my $tokens     = $self->get_current_tokens;
+
+  foreach my $token ( @{ $self->get_definition->{tokens} } ) {
+    my $input = $token->{input};
+    my $value = $tokens->{$input};
+
+    if ( $self->_is_usable_token($value) ) {
+      $parameters{$input} = $value;
+      next;
+    }
+
+    delete $parameters{$input};
+  }
+
+  return \%parameters;
+}
+
+########################################################################
+sub result {
+########################################################################
+  my ($self) = @_;
+
+  my $result = $self->get_aggregate;
+
+  $self->_merge_hashes( $result, $self->get_preserved );
+
+  return $result;
+}
+
+########################################################################
+sub _aggregate_page {
+########################################################################
+  my ( $self, $page ) = @_;
+
+  my $results = $self->get_definition->{results};
+
+  foreach my $verb ( sort keys %{$results} ) {
+    my $method = "_aggregate_$verb";
+
+    croak "unsupported paginator result verb: $verb"
+      if !$self->can($method);
+
+    foreach my $selector ( @{ $results->{$verb} } ) {
+      my $value = $self->_evaluate_selector( $page, $selector );
+
+      next
+        if !defined $value;
+
+      $self->$method( $selector, $value );
+    }
+  }
+
+  return;
+}
+
+########################################################################
+sub _aggregate_add {
+########################################################################
+  my ( $self, $selector, $value ) = @_;
+
+  croak 'add result value must be a scalar'
+    if ref $value;
+
+  my $aggregate = $self->get_aggregate;
+  my $existing  = $self->_evaluate_selector( $aggregate, $selector );
+
+  if ( !defined $existing ) {
+    $self->_set_value( $aggregate, $selector, $value );
+    return;
+  }
+
+  $self->_set_value( $aggregate, $selector, $existing + $value );
+
+  return;
+}
+
+########################################################################
+sub _aggregate_append {
+########################################################################
+  my ( $self, $selector, $value ) = @_;
+
+  croak 'append result value must be an array reference'
+    if !ref $value || reftype($value) ne 'ARRAY';
+
+  my $aggregate = $self->get_aggregate;
+  my $existing  = $self->_evaluate_selector( $aggregate, $selector );
+
+  if ( !defined $existing ) {
+    $self->_set_value( $aggregate, $selector, [ @{$value} ] );
+    return;
+  }
+
+  croak 'existing append result value must be an array reference'
+    if !ref $existing || reftype($existing) ne 'ARRAY';
+
+  push @{$existing}, @{$value};
+
+  return;
+}
+
+########################################################################
+sub _aggregate_concat {
+########################################################################
+  my ( $self, $selector, $value ) = @_;
+
+  croak 'concat result value must be a scalar'
+    if ref $value;
+
+  my $aggregate = $self->get_aggregate;
+  my $existing  = $self->_evaluate_selector( $aggregate, $selector );
+
+  if ( !defined $existing ) {
+    $self->_set_value( $aggregate, $selector, $value );
+    return;
+  }
+
+  $self->_set_value( $aggregate, $selector, $existing . $value );
+
+  return;
+}
+
+########################################################################
+sub _aggregate_first {
+########################################################################
+  my ( $self, $selector, $value ) = @_;
+
+  my $aggregate = $self->get_aggregate;
+  my $existing  = $self->_evaluate_selector( $aggregate, $selector );
+
+  return
+    if defined $existing;
+
+  $self->_set_value( $aggregate, $selector, $value );
+
+  return;
+}
+
+########################################################################
+sub _preserve_page {
+########################################################################
+  my ( $self, $page ) = @_;
+
+  my $preserve = $self->get_definition->{preserve} // [];
+
+  foreach my $selector ( @{$preserve} ) {
+    my $value = $self->_evaluate_selector( $page, $selector );
+    $self->_set_value( $self->get_preserved, $selector, $value );
+  }
+
+  return;
+}
+
+########################################################################
+sub _next_tokens {
+########################################################################
+  my ( $self, $page ) = @_;
+
+  my %tokens;
+
+  foreach my $token ( @{ $self->get_definition->{tokens} } ) {
+    my $input = $token->{input};
+    my $value = $self->_evaluate_expression( $page, $token->{output} );
+
+    $tokens{$input}
+      = $self->_is_usable_token($value)
+      ? $value
+      : undef;
+  }
+
+  return \%tokens;
+}
+
+########################################################################
+sub _evaluate_expression {
+########################################################################
+  my ( $self, $source, $expression ) = @_;
+
+  my $selectors = $expression->{selectors};
+
+  croak 'paginator expression selectors must be an array reference'
+    if !ref $selectors || reftype($selectors) ne 'ARRAY' || !@{$selectors};
+
+  foreach my $idx ( 0 .. $#{$selectors} ) {
+    my $value = $self->_evaluate_selector( $source, $selectors->[$idx] );
+
+    return $value
+      if $idx == $#{$selectors};
+
+    return $value
+      if $self->_is_truthy($value);
+  }
+
+  return;
+}
+
+########################################################################
+sub _evaluate_selector {
+########################################################################
+  my ( $self, $source, $selector ) = @_;
+
+  croak 'selector must be an array reference'
+    if !ref $selector || reftype($selector) ne 'ARRAY';
+
+  my $value = $source;
+
+  foreach my $step ( @{$selector} ) {
+    return
+      if !defined $value;
+
+    if ( !ref $step ) {
+      return
+        if !ref $value || reftype($value) ne 'HASH';
+
+      return
+        if !exists $value->{$step};
+
+      $value = $value->{$step};
+      next;
+    }
+
+    croak 'invalid selector index step'
+      if reftype($step) ne 'HASH'
+      || !exists $step->{index}
+      || keys %{$step} != 1;
+
+    return
+      if !ref $value || reftype($value) ne 'ARRAY';
+
+    my $index = $step->{index};
+    $index += @{$value}
+      if $index < 0;
+
+    return
+      if $index < 0 || $index > $#{$value};
+
+    $value = $value->[$index];
+  }
+
+  return $value;
+}
+
+########################################################################
+sub _set_value {
+########################################################################
+  my ( $self, $target, $selector, $value ) = @_;
+
+  croak 'target must be a hash reference'
+    if !ref $target || reftype($target) ne 'HASH';
+
+  croak 'target selector must be a non-empty array reference'
+    if !ref $selector
+    || reftype($selector) ne 'ARRAY'
+    || !@{$selector};
+
+  my $current = $target;
+
+  foreach my $idx ( 0 .. $#{$selector} ) {
+    my $step = $selector->[$idx];
+
+    croak 'indexed selectors cannot be result targets'
+      if ref $step;
+
+    if ( $idx == $#{$selector} ) {
+      $current->{$step} = $value;
+      last;
+    }
+
+    $current->{$step} //= {};
+
+    croak "result target $step is not a hash reference"
+      if !ref $current->{$step}
+      || reftype( $current->{$step} ) ne 'HASH';
+
+    $current = $current->{$step};
+  }
+
+  return;
+}
+
+########################################################################
+sub _merge_hashes {
+########################################################################
+  my ( $self, $target, $source ) = @_;
+
+  foreach my $key ( keys %{$source} ) {
+    my $value = $source->{$key};
+
+    if ( ref $value && reftype($value) eq 'HASH' ) {
+      if ( !exists $target->{$key} ) {
+        $target->{$key} = {};
+      }
+
+      croak "cannot merge paginator result at $key"
+        if !ref $target->{$key}
+        || reftype( $target->{$key} ) ne 'HASH';
+
+      $self->_merge_hashes( $target->{$key}, $value );
+      next;
+    }
+
+    $target->{$key} = $value;
+  }
+
+  return;
+}
+
+########################################################################
+sub _is_truthy {
+########################################################################
+  my ( $self, $value ) = @_;
+
+  return 0
+    if !defined $value;
+
+  if ( !ref $value ) {
+    return length "$value" ? 1 : 0;
+  }
+
+  if ( blessed($value) ) {
+    return $value ? 1 : 0;
+  }
+
+  my $type = reftype($value) // q{};
+
+  return @{$value} ? 1 : 0
+    if $type eq 'ARRAY';
+
+  return keys %{$value} ? 1 : 0
+    if $type eq 'HASH';
+
+  return $value ? 1 : 0;
+}
+
+########################################################################
+sub _is_usable_token {
+########################################################################
+  my ( $self, $value ) = @_;
+
+  return $self->_is_truthy($value);
+}
+
+########################################################################
+sub _same_token_set {
+########################################################################
+  my ( $self, $left, $right ) = @_;
+
+  return $self->_same_value( $left, $right );
+}
+
+########################################################################
+sub _same_value {
+########################################################################
+  my ( $self, $left, $right ) = @_;
+
+  return 1
+    if !defined $left && !defined $right;
+
+  return 0
+    if !defined $left || !defined $right;
+
+  my $left_type  = ref $left  ? reftype($left)  : q{};
+  my $right_type = ref $right ? reftype($right) : q{};
+
+  return 0
+    if $left_type ne $right_type;
+
+  return "$left" eq "$right" ? 1 : 0
+    if !$left_type;
+
+  if ( $left_type eq 'ARRAY' ) {
+    return 0
+      if @{$left} != @{$right};
+
+    foreach my $idx ( 0 .. $#{$left} ) {
+      return 0
+        if !$self->_same_value( $left->[$idx], $right->[$idx] );
+    }
+
+    return 1;
+  }
+
+  if ( $left_type eq 'HASH' ) {
+    return 0
+      if keys %{$left} != keys %{$right};
+
+    foreach my $key ( keys %{$left} ) {
+      return 0
+        if !exists $right->{$key}
+        || !$self->_same_value( $left->{$key}, $right->{$key} );
+    }
+
+    return 1;
+  }
+
+  croak "unsupported paginator token type: $left_type";
+}
+
+1;
+
+__END__
+
+=pod
+
+=encoding utf8
+
+=head1 NAME
+
+Amazon::API::Paginator - execute compiled Amazon::API paginator definitions
+
+=head1 SYNOPSIS
+
+ my $paginator = Amazon::API::Paginator->new(
+   definition => $compiled_paginators->{ListThings},
+   parameters => $parameters,
+ );
+
+ $paginator->add_page($decoded_response);
+
+ while ( $paginator->has_next_page ) {
+   my $next_parameters = $paginator->next_parameters;
+   ... fetch and decode the next page ...
+   $paginator->add_page($decoded_response);
+ }
+
+ my $result = $paginator->result;
+
+=head1 DESCRIPTION
+
+C<Amazon::API::Paginator> is the runtime execution engine for paginator
+metadata produced by L<Amazon::API::Paginator::Compiler>. It is intentionally
+independent of HTTP, request serialization, response decoding, and Botocore's
+raw paginator vocabulary.
+
+A paginator object represents one API invocation. It accumulates result keys,
+preserves first-page metadata, evaluates continuation and output-token
+selectors, detects repeated token sets, and builds parameters for the next
+request from the caller's original parameters.
+
+=head1 METHODS
+
+=head2 new
+
+ my $paginator = Amazon::API::Paginator->new(
+   definition => $definition,
+   parameters => $parameters,
+ );
+
+Both arguments are required hash references. C<parameters> is copied so the
+caller's hash is never modified.
+
+=head2 add_page
+
+ $paginator->add_page($decoded_response);
+
+Adds one decoded response page to the aggregate result and computes the token
+state for the next request. Repeated next-token sets raise an exception rather
+than allowing an infinite pagination loop.
+
+If an explicit continuation selector is present and evaluates false, pagination
+ends without evaluating a next request. If continuation is true but no usable
+output token is present, pagination also ends.
+
+=head2 has_next_page
+
+ return $paginator->has_next_page;
+
+Returns true when the most recently added page supplied a usable next-token
+set and continuation permits another request.
+
+=head2 next_parameters
+
+ my $parameters = $paginator->next_parameters;
+
+Returns a new hash reference containing the original invocation parameters
+with the current paginator token values applied. Token members with no current
+value are removed. This preserves caller-supplied request options, including a
+compiled paginator C<limit> member, without special-case mutation.
+
+Returns undef when pagination is complete.
+
+=head2 result
+
+ my $result = $paginator->result;
+
+Returns the accumulated result with first-page C<preserve> values merged back
+into their original response paths.
+
+=head1 AUTHOR
+
+See the Amazon::API distribution.
+
+=cut

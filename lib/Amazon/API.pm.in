@@ -11,6 +11,7 @@ use Amazon::API::Error;
 use Amazon::API::Signature4;
 use Amazon::API::Constants qw( :all );
 use Amazon::API::NullLogger;
+use Amazon::API::Paginator;
 use Amazon::API::HTTP::UserAgent;
 use Amazon::Credentials;
 use Amazon::API::Botocore::Shape;
@@ -54,6 +55,7 @@ __PACKAGE__->mk_accessors(
     botocore_operations
     botocore_request_headers
     botocore_shapes
+    compiled_paginators
     content_type
     credentials
     debug
@@ -85,6 +87,7 @@ __PACKAGE__->mk_accessors(
     target_prefix
     url
     use_botocore
+    use_legacy_paginator
     user_agent
     use_paginator
     version
@@ -1496,14 +1499,32 @@ sub invoke_api {
     ref $self
     if blessed($parameters) && !$self->is_botocore_api;
 
-  # auto pagination is only available when using the Botocore metadata
-  my $paginator = $self->_init_paginator( $use_botocore, $action );
-
-  my $limit_key = $paginator ? $paginator->{limit_key}   : undef;
-  my $limit     = $limit_key ? $parameters->{$limit_key} : undef;
-
-  # save this for pagination
+  # save the caller's parameters before converting them to a request shape
   my $original_content = $parameters;
+
+  my $legacy_paginator;
+  my $paginator;
+
+  if ( $use_botocore && $self->get_use_paginator && $self->get_decode_always ) {
+
+    my $compiled_paginators = $self->get_compiled_paginators;
+
+    if ( $self->get_use_legacy_paginator || !defined $compiled_paginators ) {
+      $legacy_paginator = $self->_init_paginator( $use_botocore, $action );
+    }
+    elsif ( my $definition = $compiled_paginators->{$action} ) {
+      $paginator = Amazon::API::Paginator->new(
+        definition => $definition,
+        parameters => $original_content // {},
+      );
+    }
+    elsif ( $self->_init_paginator( $use_botocore, $action ) ) {
+      croak "missing compiled paginator definition for $action";
+    }
+  }
+
+  my $limit_key = $legacy_paginator ? $legacy_paginator->{limit_key} : undef;
+  my $limit     = $limit_key        ? $parameters->{$limit_key}      : undef;
 
   # set content type and parameters
   if ($use_botocore) {
@@ -1533,6 +1554,7 @@ sub invoke_api {
 
   my $page_count = 0;
   my @paged_results;
+  my $previous_token;
 
   while ($TRUE) {
 
@@ -1562,7 +1584,7 @@ sub invoke_api {
       if !$self->_check_response($rsp);
 
     # non-botocore or raw content path
-    if ( !$paginator ) {
+    if ( !$legacy_paginator && !$paginator ) {
       return $rsp->content
         if !$self->get_decode_always;
 
@@ -1571,10 +1593,21 @@ sub invoke_api {
 
     my $result = $self->decode_response;
 
+    if ($paginator) {
+      $paginator->add_page($result);
+
+      last
+        if !$paginator->has_next_page;
+
+      $serialized_content = $self->serialize_content( $self->init_botocore_request( $paginator->next_parameters ) );
+
+      next;
+    }
+
     $self->get_logger->debug(
       sub {
         return Dumper(
-          [ paginator     => $paginator,
+          [ paginator     => $legacy_paginator,
             paged_results => @paged_results,
             result        => $result
           ]
@@ -1582,7 +1615,7 @@ sub invoke_api {
       }
     );
 
-    my $actual_result = dig( $result, $paginator, 'result_key' );
+    my $actual_result = dig( $result, $legacy_paginator, 'result_key' );
 
     last if !$actual_result;
 
@@ -1593,29 +1626,38 @@ sub invoke_api {
         return Dumper(
           [ result        => $actual_result,
             paged_results => \@paged_results,
-            more_results  => $paginator->{more_results},
-            paginator     => $paginator,
+            more_results  => $legacy_paginator->{more_results},
+            paginator     => $legacy_paginator,
           ]
         );
       }
     );
 
-    last if !dig( $result, $paginator, 'more_results' );
+    last if !dig( $result, $legacy_paginator, 'more_results' );
 
     $limit //= $result->{$limit_key};
 
+    my $next_token = dig( $result, $legacy_paginator, 'output_token' );
+
+    croak "ERROR: legacy paginator received the same token twice for $action"
+      if defined $previous_token
+      && defined $next_token
+      && $previous_token eq $next_token;
+
+    $previous_token = $next_token;
+
     $serialized_content = $self->serialize_content(
       $self->init_botocore_request(
-        { %{$original_content},
-          $limit ? ( $limit_key => $limit ) : (),
-          $paginator->{input_token} => dig( $result, $paginator, 'output_token' ),
-        }
+        { %{$original_content}, $limit ? ( $limit_key => $limit ) : (), $legacy_paginator->{input_token} => $next_token, }
       )
     );
 
   }
 
-  return bury( \@paged_results, $paginator, 'result_key' );
+  return $paginator->result
+    if $paginator;
+
+  return bury( \@paged_results, $legacy_paginator, 'result_key' );
 }
 
 ########################################################################
@@ -2007,12 +2049,31 @@ sub _init_paginator {
 ########################################################################
   my ( $self, $use_botocore, $action ) = @_;
 
-  return if !$use_botocore || !$self->get_use_paginator || !$self->get_decode_always;
+  return
+    if !$use_botocore || !$self->get_use_paginator || !$self->get_decode_always;
 
-  my $paginator = $self->get_paginators && $self->get_paginators->{$action};
+  my $paginators = $self->get_paginators;
+
+  return
+    if !$paginators || !$paginators->{pagination};
+
+  my $paginator = $paginators->{pagination}->{$action};
 
   return
     if !$paginator;
+
+  foreach my $marker (qw(input_token output_token result_key)) {
+    croak "ERROR: legacy paginator does not support $action paginator marker $marker"
+      if !defined $paginator->{$marker} || ref $paginator->{$marker};
+  }
+
+  foreach my $marker (qw(limit_key more_results)) {
+    croak "ERROR: legacy paginator does not support $action paginator marker $marker"
+      if defined $paginator->{$marker} && ref $paginator->{$marker};
+  }
+
+  croak "ERROR: legacy paginator does not support $action non_aggregate_keys"
+    if defined $paginator->{non_aggregate_keys};
 
   $paginator->{more_results} //= $paginator->{output_token};
 
@@ -2143,13 +2204,14 @@ sub _set_defaults {
 ########################################################################
   my ( $self, %options ) = @_;
 
-  $self->set_raise_error( $self->get_raise_error     // $TRUE );
-  $self->set_print_error( $self->get_print_error     // $TRUE );
-  $self->set_use_paginator( $self->get_use_paginator // $TRUE );
-  $self->set_decode_always( $self->get_decode_always // $TRUE );
-  $self->set_user_agent( $self->get_user_agent       // Amazon::API::HTTP::UserAgent->new );
-  $self->set_protocol( $self->get_protocol()         // 'https' );
-  $self->set_http_method( $self->get_http_method     // 'POST' );  # most API services are POST
+  $self->set_raise_error( $self->get_raise_error                   // $TRUE );
+  $self->set_print_error( $self->get_print_error                   // $TRUE );
+  $self->set_use_paginator( $self->get_use_paginator               // $TRUE );
+  $self->set_use_legacy_paginator( $self->get_use_legacy_paginator // $FALSE );
+  $self->set_decode_always( $self->get_decode_always               // $TRUE );
+  $self->set_user_agent( $self->get_user_agent                     // Amazon::API::HTTP::UserAgent->new );
+  $self->set_protocol( $self->get_protocol()                       // 'https' );
+  $self->set_http_method( $self->get_http_method                   // 'POST' );  # most API services are POST
 
   my $region = $self->get_region;
 

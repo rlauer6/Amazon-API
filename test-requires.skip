@@ -1,3 +1,5 @@
 Amazon::API
 Amazon::API::Signature4
 Amazon::API::Botocore::Shape::Utils
+Amazon::API::Paginator::Compiler
+Amazon::API::Paginator

@@ -34,7 +34,7 @@ sub _retrieve_botocore_descriptions {
   push @candidates, "$dist_dir/$service.api" if $dist_dir;
   push @candidates, sprintf '%s/%s.api', dirname( $INC{$module} ), $service;
 
-  my ($metadata_file) = grep { -e $_ } map { $_, "$_.gz" } @candidates;
+  my ($metadata_file) = grep { -e $_ } map { ("$_.gz", $_) } @candidates;
  
   croak "ERROR: could not find Botocore metdata file\n"
     if !$metadata_file;
@@ -79,6 +79,7 @@ sub new {
       botocore_operations => $botocore_descriptions->{operations},
       botocore_shapes     => $botocore_descriptions->{shapes},
       paginators          => $botocore_descriptions->{paginators},
+      compiled_paginators => $botocore_descriptions->{compiled_paginators},
       api_methods         => [ keys %{ $botocore_descriptions->{operations} } ],
       debug               => $ENV{DEBUG} // 0,
       decode_always       => 1,

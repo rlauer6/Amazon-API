@@ -1,3 +1,16 @@
+# ./API.pm.in
+./API.pm: \
+    ./lib/Amazon/API/Botocore/Shape.pm \
+    ./lib/Amazon/API/Botocore/Shape/Serializer.pm \
+    ./lib/Amazon/API/Botocore/Shape/Utils.pm \
+    ./lib/Amazon/API/Constants.pm \
+    ./lib/Amazon/API/Error.pm \
+    ./lib/Amazon/API/HTTP/UserAgent.pm \
+    ./lib/Amazon/API/NullLogger.pm \
+    ./lib/Amazon/API/Role/Botocore.pm \
+    ./lib/Amazon/API/Signature4.pm \
+    ./lib/Amazon/API/XML/Simple.pm
+
 # ./lib/Amazon/API.pm.in
 ./lib/Amazon/API.pm: \
     ./lib/Amazon/API/Botocore/Shape.pm \
@@ -7,6 +20,7 @@
     ./lib/Amazon/API/Error.pm \
     ./lib/Amazon/API/HTTP/UserAgent.pm \
     ./lib/Amazon/API/NullLogger.pm \
+    ./lib/Amazon/API/Paginator.pm \
     ./lib/Amazon/API/Role/Botocore.pm \
     ./lib/Amazon/API/Signature4.pm \
     ./lib/Amazon/API/XML/Simple.pm
@@ -57,6 +71,7 @@
 # ./lib/Amazon/API/Role/Botocore.pm.in
 ./lib/Amazon/API/Role/Botocore.pm: \
     ./lib/Amazon/API/Constants.pm \
+    ./lib/Amazon/API/Paginator/Compiler.pm \
     ./lib/Amazon/API/Template.pm
 
 # ./lib/Amazon/API/Role/Services.pm.in
