@@ -35,8 +35,6 @@ services.api
 botocore-metadata.api
 botocore-version.json
 bin/amzn-api-module-names
-**/*.pl
-**/*.pm
 **/*.raw
 extra-files.mk
 bin/amzn-api-provenance

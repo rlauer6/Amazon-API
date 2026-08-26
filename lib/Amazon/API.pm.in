@@ -243,6 +243,31 @@ sub decode_response {
   my ( $protocol, $botocore_action )
     = eval { return ( $self->get_botocore_metadata->{protocol}, $self->get_botocore_action, ); };
 
+  my $output = $botocore_action ? $botocore_action->{output} : undef;
+
+  my $output_shape = $output ? $self->get_botocore_shapes->{ $output->{shape} } : undef;
+  my $payload_shape;
+
+  if ( $protocol
+    && $protocol =~ /^(?:rest-json|rest-xml)$/xsm
+    && $output_shape
+    && $output_shape->{payload} ) {
+    my $payload = $output_shape->{payload};
+
+    my $member = $output_shape->{members}->{$payload};
+
+    if ($member) {
+      $payload_shape = $self->get_botocore_shapes->{ $member->{shape} };
+    }
+  }
+
+  my $payload_type
+    = $payload_shape
+    ? $payload_shape->{type} // $EMPTY
+    : $EMPTY;
+
+  my $is_raw_payload = $payload_type =~ /^(?:blob|string)$/xsm;
+
   $self->get_logger->trace(
     sub {
       return Dumper(
@@ -255,7 +280,7 @@ sub decode_response {
 
   my $decoded_content;
 
-  if ($has_response_content) {
+  if ( $has_response_content && !$is_raw_payload ) {
     $decoded_content = eval {
       if ( $content_type =~ /json/xmsi ) {
         return decode_json($content);
@@ -335,10 +360,6 @@ sub decode_response {
   if ($serializer) {
     $serializer->set_protocol($protocol);
   }
-
-  my $output = $botocore_action ? $botocore_action->{output} : undef;
-
-  my $output_shape = $output ? $self->get_botocore_shapes->{ $output->{shape} } : undef;
 
   my $is_json_protocol = $protocol && any { $protocol eq $_ } qw(json rest-json );
 

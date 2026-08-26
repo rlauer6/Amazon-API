@@ -1,3 +1,25 @@
+Wed Aug 26 10:10:53 2026  Rob Lauer  <rclauer@gmail.com>
+
+	[2.6.2]:
+	* VERSION: bump
+	* release-notes: updated
+	* release-notes/release-notes-2.6.2.md: new
+	* .gitignore: don't ignore all .pm, .pl everywhere
+	* corpus-test/t/input-ec2.t: renamed from ec2.t
+	* corpus-test/t/input-json.t: renamed from json.t
+	* corpus-test/t/input-query.t: rename from query.t
+	* corpus-test/t/input-rest-json.t: renamed from rest-json.t
+	* corpus-test/t/input-rest-xml.t: renamed from rest-xml.t
+	* corpus-test/t/input-test.pl: new
+	* corpus-test/t/input-query.pl: new
+	* corpus-test/t/input-rest-xml.pl: new
+	* corpus-test/t/output-test.pl: new
+	* corpus-test/lib/ProtocolTest.pm: new
+	* corpus-test/t/input-ec2.pl: new
+	* lib/Amazon/API.pm.in
+	(decode_response)
+	- Honor top-level output payload shapes before content-based response decoding.
+
 Tue Aug 25 05:03:42 2026  Rob Lauer  <rclauer@gmail.com>
 
 	[2.6.1]:
@@ -6,7 +28,7 @@ Tue Aug 25 05:03:42 2026  Rob Lauer  <rclauer@gmail.com>
 	* release-notes/release-notes-2.6.1.md: new
 	* corpus-test.mk: new
 	* project.mk: include above
-	* corpus-test/t/ec2.t: new
+	* corpus-test/t/input-ec2.t: new
 	* corpus-test/t/error-ec2.t: new
 	* corpus-test/t/error-json.t: new
 	* corpus-test/t/error-query.t: new
