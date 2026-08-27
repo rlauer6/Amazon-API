@@ -1,3 +1,27 @@
+Thu Aug 27 04:46:20 2026  Rob Lauer  <rclauer@gmail.com>
+
+	[2.7.1]:
+	* VERSION: bump
+	* LICENSE.botocore: new
+	* NOTICE.botocore: new
+	* NOTICE.in: new
+	* .gitignore: +NOTICE
+	* ChangeLog: modified
+	* buildspec-api.yml.in
+	- +NOTICE, NOTICE.botocore, LICENSE.botocore
+	* buildspec.yml: likewise
+	* project.mk
+	- add build targets for NOTICE, botocore notice/license
+	(LOCAL_DEPS)
+	- new
+	- moved local dependencies from DEPS
+	- +NOTICE, NOTICE.botocore, LICENSE.botocore
+	(DEPS)
+	- +LOCAL_DEPS
+	(NOTICE)
+	- new
+	- build from NOTICE.in
+
 Wed Aug 26 15:53:14 2026  Rob Lauer  <rclauer@gmail.com>
 
 	[2.7.0]:

@@ -13,6 +13,9 @@ dependencies:
 path:
   pm-module: lib
 extra-files:
+  - NOTICE
+  - NOTICE.botocore
+  - LICENSE.botocore
   - share:
       - lib/Amazon/API/@service@.api.gz
 resources:

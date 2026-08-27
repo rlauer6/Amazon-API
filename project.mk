@@ -13,7 +13,14 @@ AMAZON_API          = $(BUILD_DIR)/bin/amzn-api
 METADATA  = --no-metadata
 ########################################################################
 
-DEPS += services.api botocore-metadata.api
+LOCAL_DEPS = \
+    services.api \
+    botocore-metadata.api \
+    NOTICE \
+    NOTICE.botocore \
+    LICENSE.botocore
+
+DEPS += $(LOCAL_DEPS)
 
 $(AMAZON_API):
 	$(NO_ECHO)cd $(BUILD_DIR); \
@@ -29,7 +36,11 @@ workdir:
 	$(NO_ECHO)mkdir -p workdir
 
 .PHONY: cpan-dist
-cpan-dist: workdir/buildspec-api.yml workdir/requires | workdir ## create a CPAN distribution for an AWS API (make SERVICE=route53 MODULE_ALIAS=Route53)
+cpan-dist: workdir/buildspec-api.yml \
+    workdir/requires \
+    workdir/NOTICE \
+    workdir/NOTICE.botocore \
+    workdir/LICENSE.botocore | workdir ## create a CPAN distribution for an AWS API (make SERVICE=route53 MODULE_ALIAS=Route53)
 	$(NO_ECHO)cd workdir; \
 	echo "Creating Amazon::API::$$(cat module)..."; \
 	test -n "$$DEBUG" && set -x; \
@@ -76,6 +87,15 @@ workdir/service.api: \
 	PERL5LIB=../lib:$$PERL5LIB $(AMAZON_API) -b $(BOTOCORE_PATH)  -s "$$service" -m "$$module_name" -o lib create-stub; \
 	cp "lib/Amazon/API/$${module_name}.api.gz" $$(basename $@)
 
+workdir/NOTICE: NOTICE | workdir
+	$(NO_ECHO)cp NOTICE workdir/
+
+workdir/NOTICE.botocore: | workdir
+	$(NO_ECHO)cp NOTICE.botocore workdir/
+
+workdir/LICENSE.botocore: | workdir
+	$(NO_ECHO)cp LICENSE.botocore workdir/
+
 workdir/buildspec-api.yml: buildspec-api.yml.in workdir/service.api | workdir
 	$(NO_ECHO)service=$$(cat workdir/service 2>/dev/null || true); \
 	GIT=$$(command -v git || true); \
@@ -114,3 +134,10 @@ clean-local::
 	$(NO_ECHO)rm -rf workdir *.sig
 
 include corpus-test.mk
+
+NOTICE: NOTICE.in botocore-version.json
+	$(NO_ECHO)BOTOCORE_VERSION=$$(cat botocore-version.json | perl -MJSON=decode_json -n0e '$$v=decode_json($$_); print "$$v->{version}";'); \
+	BOTOCORE_COMMIT=$$(cat botocore-version.json |perl -MJSON=decode_json -n0e '$$v=decode_json($$_); print "$$v->{commit}";'); \
+        export BOTOCORE_COMMIT BOTOCORE_VERSION; \
+	$(BOOTSTRAPPER) resolve-vars $< > $@
+

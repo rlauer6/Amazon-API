@@ -15,7 +15,11 @@ path:
   tests: t
 extra-files:
   - ChangeLog
-  - share:
+  - NOTICE
+  - NOTICE.botocore
+  - LICENSE.botocore
+  -
+    share:
       - README.md
       - release-notes.md
       - services.api
@@ -26,6 +30,9 @@ extra-files:
       - botocore-version.json
       - share/stub.pm.tmpl
       - buildspec-api.yml.in
+      - NOTICE
+      - NOTICE.botocore
+      - LICENSE.botocore
 resources:
   bugtracker:
     mailto: rclauer@gmail.com
