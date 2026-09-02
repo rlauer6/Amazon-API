@@ -14,7 +14,8 @@ use Storable qw(retrieve);
 
 use parent qw( Amazon::API );
 
-our $VERSION = '@version@';
+our $VERSION = '@botocore_version@';
+our $COMMIT = '@botocore_commit@';
 
 ########################################################################
 sub _retrieve_botocore_descriptions {

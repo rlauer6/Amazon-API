@@ -1,3 +1,17 @@
+Wed Sep  2 10:23:25 2026  Rob Lauer  <rclauer@gmail.com>
+
+	[2.7.2]:
+	* .gitignore: **/*.pl, **/*.pm
+	* Makefile: update by CPAN::Maker::Bootstrapper
+	* builder: likewise
+	* deps.mk: whitespace
+	* lib/Amazon/API.pm.in
+	- pod update
+	* lib/Amazon/API/Role/Botocore.pm.in
+	(create_stub)
+	- add botocore_version, botocore_commit
+	* share/stub.pm.tmpl: likewise
+
 Thu Aug 27 04:46:20 2026  Rob Lauer  <rclauer@gmail.com>
 
 	[2.7.1]:

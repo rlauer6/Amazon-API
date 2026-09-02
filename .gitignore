@@ -42,3 +42,5 @@ bin/amzn-api-provenance
 local/**
 provenance*
 bin/amzn-api
+**/*.pl
+**/*.pm

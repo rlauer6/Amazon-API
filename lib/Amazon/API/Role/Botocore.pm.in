@@ -4,11 +4,12 @@ use strict;
 use warnings;
 
 use Amazon::API::Constants qw($PADDING);
+use Amazon::API::BuildInfo;
 use Amazon::API::Paginator::Compiler;
 use Amazon::API::Template qw(fetch_template to_template_var render_template);
 
 use Carp;
-use CLI::Simple::Utils qw(slurp choose);
+use CLI::Simple::Utils qw(slurp slurp_json choose);
 use CLI::Simple::Constants qw(:booleans :chars);
 use Cwd qw(getcwd abs_path);
 use Data::Dumper;
@@ -255,9 +256,16 @@ sub create_stub {
   my $version = $parameters->{version};
   $parameters->{service_version} = $version;
 
-  $version =~ s/[-]/./xsmg;
-  $parameters->{version} = $version;
+  ######################################################################
+  # Botocore version
+  ######################################################################
+  my $api_version = Amazon::API::BuildInfo->version();
+  $parameters->{botocore_version} = $api_version->{botocore_version}->{version};
+  $parameters->{botocore_commit}  = $api_version->{botocore_version}->{commit};
 
+  ######################################################################
+  # resolve stub template
+  ######################################################################
   my @template_vars = qw(
     content_type
     endpoint_prefix
@@ -267,7 +275,8 @@ sub create_stub {
     service
     service_2_digest
     target_prefix
-    version
+    botocore_version
+    botocore_commit
     service_version
   );
 

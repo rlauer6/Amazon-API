@@ -2485,13 +2485,14 @@ community support. If you are looking for an extensible method of
 installing and invoking a subset of services you might want to
 consider C<Amazon::API>.
 
-Think of this class as a DIY kit for installing B<only> the APIs and methods you
-need for your AWS project.  Using the included C<amzn-api> utility
-you can also roll your own complete Amazon API classes that
+Think of this class as a DIY kit for installing B<only> the APIs and
+methods you need for your AWS project. Using the included C<amzn-api>
+utility you can also roll your own complete Amazon API classes that
 include support for serializing requests and responses based on
-metadata provided by the Botocore project. The classes you create with
-C<amzn-api> include full documentation as pod. (See L</BOTOCORE
-SUPPORT> for more details).
+metadata provided by the Botocore project.  Detailed service and API
+documentation is provided separately by L<Amazon::API::Help>.  See
+L</BOTOCORE SUPPORT> for more details.
+
 
 =over 5
 
@@ -2699,7 +2700,7 @@ Using L<Amazon::API> as a generic, lightweight module, naturally does
 not provide nuanced support for individual AWS services. To use this
 class in that manner for invoking the AWS APIs, you need to be B<very
 familiar with the specific API requirements and responses> and be
-willng to invest time reading the documentation on Amazon's website.
+willing to invest time reading the documentation on Amazon's website.
 The payoff is that you can probably use this class to call I<any> AWS
 API without installing a large number of dependencies.
 
@@ -2707,9 +2708,10 @@ If you don't mind a few extra dependencies and overhead, you should
 generate the stub APIs using the C<amzn-api> utility or download the
 classes from the L</Amazon::API>. The stubs produced by the utility
 will serialize and deserialize requests and responses correctly by
-using the Botocore metadata. Botocore metadata provides the necessary
-information to create classes that can successfully invoke all of the
-Amazon APIs.
+using the Botocore metadata. The generated classes use the Botocore
+service models together with C<Amazon::API>'s protocol
+implementation to serialize requests and deserialize responses for the
+supported Botocore protocols.
 
 Invoking some of the APIs I<can potentially be> as easy as:
 
@@ -2742,9 +2744,9 @@ the Botocore metadata.
 
 Perl classes that represent AWS data structures (aka shapes) that are
 passed to or returned from services are generated dynamically from the
-Botocore metadata. These classes allow you to call all of the API
-methods for a given service using simple Perl objects that are
-serialized correctly for a specific method.
+Botocore metadata. These classes use the Botocore shape and protocol
+metadata to serialize requests and deserialize responses for each
+method.
 
 Service classes are subclassed from C<Amazon::API> so their C<new()>
 constructor takes the same arguments as C<Amazon::API::new()>.
@@ -2755,39 +2757,56 @@ constructor takes the same arguments as C<Amazon::API::new()>.
 
 =head2 Response Serialization
 
-With little documentation to go on, interpretting the Botocore
-metadata and deducing how to serialize Botocore shapes (using a single
-serializer) from Perl objects has been a difficult task. It's likely
-that there are still some edge cases and bugs lurking in the
-serialization methods. Accordingly, starting with version 1.4.5,
-serialization exceptions or exceptions that occur while attempting to
-decode a response, will result in the raw response being returned to
-the caller. The idea being that getting something back that allows you
-figure out what to do with the response might be better than receiving
-an error.
+Botocore responses are decoded and serialized into Perl data structures
+using the service shape and protocol metadata.
 
-OTOH, you might want to see the error, report it, or possibly
-contribute to its resolution.  You can prevent errors from being
-surpressed by setting the C<raise_serializtion_errors> to a true
-value. The default is I<false>.
+Starting with version 1.4.5, an exception encountered while decoding or
+serializing a response causes the raw response to be returned to the
+caller rather than making an otherwise successful API response
+unavailable.
 
-I<Throughout the rest of this documentation a request made using one
-of the classes created by the Botocore support scripts will be
-referred to as a B<Botocore request> or B<Botocore API>.>
+If you need serialization failures to be fatal -- for example while
+debugging or developing protocol support -- set
+C<raise_serialization_errors> to a true value.  The default is false.
 
-Starting with version 2.0.12 serialization has become B<much more reliable>,
-but there are still some differences in the way the Python Botocore
-library serialize responses. For example, some serializers may include
-or exclude members that are not present in the response payload. If
-you are testing a response element, the best approach is to first test
-the truthiness and then test the presence of content.
+=head2 Protocol Compatibility Testing
 
-  if ( $result->{$key} && @{$result->{$key}} ) 
+The request and response serialization code is tested against the
+protocol test fixtures distributed with Botocore.  These tests exercise
+the protocol behavior independently of any particular AWS service or
+live AWS endpoint.
 
-  if ( $result->{$key} && %{result->{$key}} ) 
+The test suite covers all five Botocore protocol families currently
+supported by C<Amazon::API>:
 
-The above concerns the I<response> side. For validation of the values
-you send, see L</Request Validation> below.
+  query
+  ec2
+  json
+  rest-json
+  rest-xml
+
+The protocol tests exercise B<request serialization>, successful B<response
+deserialization>, and AWS B<error responses>.  This includes behavior such
+as URI and query-string parameters, request and response headers,
+payloads, XML namespaces and wrappers, timestamps, blobs, empty
+structures, and protocol-specific result wrappers.
+
+At the time this documentation was updated, the Botocore protocol
+corpus comprised 632 request and successful-response tests and an
+additional 31 error-response tests, all of which pass.
+
+Passing the Botocore protocol corpus does not mean that every operation
+of every AWS service has been exercised against AWS.  Botocore metadata
+describes the service models, but some protocol behavior is implemented
+by Botocore itself rather than expressed completely by that metadata.
+There may therefore still be service-specific exceptions or behavior
+not represented by the protocol fixtures.
+
+In particular, values returned by C<Amazon::API> are intended to match
+the values modeled by Botocore, not necessarily the literal values seen
+on the HTTP wire or printed by the AWS CLI.  Timestamps, booleans,
+blobs, empty collections, wrapper elements, and header-derived values
+are examples where normalization may occur.
 
 =head2 Request Validation
 
@@ -3699,20 +3718,45 @@ an edge to C<Amazon::API> which returns plain Perl objects instead of
 Moose classes. The overhead introduced by this module and Paws may be
 insignificant compared to the API performance.
 
-=head2 Does this work for all APIs?
+=head2 Does this work for all AWS APIs?
 
-I don't know. I have not tested every API. However I have tested an
-API for each of the protocols that are defined by the Botocore
-metadata (with the exception of smithy-rpc-v2-cbor) and serialization
-for every shape. Feedback is
-appreciated. 
+For the Botocore protocols supported by C<Amazon::API>, there is no
+reason to believe it should not work -- and there is substantial
+evidence that it does.
 
-Some AWS services are difficult if not impossible to create an API
-class that implements them (talkin' to you S3!).  If you want to use
-this to invoke S3 APIs, don't. I haven't tried it and I'm pretty sure
-it would'nt work anyway. There are modules designed specifically for
-S3; L<Amazon::S3::Lite>, L<Amazon::S3>, L<Net::Amazon::S3>. Use them
-instead.
+C<Amazon::API> supports the C<query>, C<ec2>, C<json>, C<rest-json>,
+and C<rest-xml> protocol families.  Request serialization, successful
+response deserialization, and AWS error-response handling have been
+tested against Botocore's own protocol test fixtures.
+
+At the time this documentation was updated, the suite included 632
+request and successful-response cases plus 31 error-response cases.
+All of them pass.
+
+This is an important distinction from testing a few representative AWS
+services.  The Botocore protocol tests exercise the underlying behavior
+shared by hundreds of service operations: URI parameters, query
+parameters, JSON and XML bodies, headers, payloads, blobs, timestamps,
+namespaces, wrappers, empty structures, errors, and other protocol
+details.
+
+In other words, the serialization layer is no longer considered
+experimental.  The supported Botocore protocols have broad automated
+coverage against the same protocol fixtures used to define Botocore's
+behavior.
+
+That does not prove that every operation of every AWS service has been
+called against a live AWS endpoint.  Individual services can still
+contain unusual behavior or exceptions that are not completely
+described by the service metadata or represented in the protocol test
+corpus.  If you encounter one, please report it.
+
+The current exception is C<smithy-rpc-v2-cbor>, which is not supported.
+
+Some services also have unusual behavior that makes a generic generated
+client a poor fit.  S3 is the most obvious example.  For S3, use a
+purpose-built client such as L<Amazon::S3::Lite>, L<Amazon::S3>, or
+L<Net::Amazon::S3> instead.
 
 =head2 This code does not use "Modern Perl". Why?
 
@@ -3744,13 +3788,20 @@ Yes. See L<Amazon::Credentials>.
 =head2 How stable is the interface?
 
 As of version 2.1.0 the interface is quite stable. There are currently
-(as of 2.6.0) no outstanding bugs logged against the project. I now
+(as of 2.7.1) no outstanding bugs logged against the project. I now
 consider this project "production ready".
 
 =head2 Why are you using XML::Simple when it clearly says "DO NOT"?
 
 It's simple. And it seems easier to build than other modules that
 almost do the same thing.
+
+I<Note: This project uses a modified vendored version of
+C<XML::Simple>. Upstream bugs affecting the behavior required by
+C<Amazon::API> are unlikely to be addressed, so the parser is maintained
+locally. In particular, the current upstream version ignores the
+C<NormaliseSpace> option and unconditionally strips whitespace inside
+elements.>
 
 =head2 How do I stop the client from rejecting a parameter value?
 
@@ -3762,72 +3813,60 @@ validation with C<$Amazon::API::VALIDATE_MODE> -- set it to C<warn> to
 downgrade the error to a warning, or C<off> to skip the check. See
 L</Request Validation>.
 
-=head2 I tried to use this with XYZ service and it didn't work. What should do I do?
+=head2 I tried to use this with XYZ service and it didn't work. What should I do?
 
-There are several reasons why your call might not have worked. The
-most likely place for API calls to fail is when serializing requests
-or serializing results. Enable debugging and see how far the API gets.
-Report whether the serialization on the request or response failed.
-If the serialization of the results failed, you can set
-C<decode_always> to false which will prevent serialization of the
-result and return the raw content sent from the API.  Other reasons
-your call may have failed include:
+Serialization is tested against the Botocore protocol test corpus, but
+that corpus cannot exercise every service-specific behavior.  If a
+request still fails, enable debugging and compare the generated request
+with the AWS CLI using C<--debug>.
 
-=over 5
+If response deserialization is the problem, setting C<decode_always> to
+false returns the raw response body and can help determine whether the
+problem is HTTP decoding, protocol handling, or shape serialization.
 
-=item * You passed bad data
+If you find a service behavior that is not represented correctly,
+please report it.  The Botocore service metadata and protocol fixtures
+are usually the best starting point for determining whether the
+exception belongs in the generic serializer or requires
+service-specific handling.
 
-Take a look at the data you passed, how was it serialized and
-ultimately passed to the API?  Setting the C<debug> flag is usually
-helpful in understanding how requests and responses are serialized.
+=head2 Why aren't all AWS services included in the distribution or available on CPAN?
 
-=item * You didn't read the docs and passed bad data
+Because the service classes are generated artifacts rather than
+independently maintained Perl distributions.
 
- amzn-api -s sqs CreateQueue
+There are hundreds of AWS services represented by Botocore.  Generating
+and publishing every possible C<Amazon::API::*> distribution whenever
+the Botocore metadata changes would create hundreds of distributions
+whether anyone needed them or not, and many would become stale as soon
+as the next Botocore snapshot was adopted.
 
-=item * The serialization of Amazon::API::Botocore::Shape isn't working
+That works against one of the basic design goals of C<Amazon::API>:
+install and maintain only the AWS APIs that an application actually
+uses.
 
-Serialization output for every class for every API method has not been
-fully tested and my never be given the breadth of objects and
-services. You may find that some API methods return C<Bad Request> or
-do not serialize the results (or more likely requests) in the manner
-expected. Requests are serialized based I<solely> on the metadata
-found in the Botocore project. There lie the clues for each API
-(protocol, end points, etc) and the models (shapes) for requests and
-response elements.
+Generated service distributions are therefore built on demand and
+stored in the public Amazon::API DarkPAN:
 
-Some requests require a query string, some an XML or JSON payload. The
-Botocore based API classes use the metadata to determine how to send a
-request and how to interpret the results. This module uses
-L<XML::Simple> or L<JSON> to parse the results. It then uses the
-L<Amazon::API::Botocore::Shape::Serializer> to turn the parsed results
-into a Perl object that respresents the response shape.
+https://cpan.openbedrock.net/orepan2
 
-It's likely that there are exceptions that are handled as special
-cases in the Python or Java libraries that also use the Botocore
-metadata. In that case use the C<aws> CLI command in C<--debug> mode
-to examine the request and response.
+The DarkPAN uses the standard CPAN repository layout and can be consumed
+by normal Perl installation tools.  Once a service distribution has
+been requested and generated, it remains available there for reuse.
 
-You can find information about each API's request and response from
-the documentation available in the L<Amazon::API::Help> tool.
+CPAN remains the distribution channel for C<Amazon::API> and the
+supporting framework and tools.  The DarkPAN is used for the much larger
+and continuously changing collection of generated service
+distributions.
 
- amzn-api-help ec2 DescribeInstancesRequest
+=head2 I downloaded Amazon::API::SQS but there's no documentation. Where is it?
 
-Make sure you understand what the API request should look
-like. C<amzn-api> will help illuminate the structure of requests you
-should be sending to APIs.
+The generated C<Amazon::API::*> service distributions intentionally do
+not include the full AWS service documentation.
 
- amzn-api-help sqs CreateQueue
-
-You can also dump the Botocore metadata from the generated classes using
-C<amzn-api>.
-
- amzn-api describe-service sqs
-
-If you find this project's serializer deficient, please log an issue
-and I will attempt to address it.
-
-=back
+See L</BETTER TOGETHER> for information about L<Amazon::API::Help>
+which provides documentation for services, API methods, request
+objects, response objects, and parameters.
 
 =head1 BETTER TOGETHER
 
@@ -3841,7 +3880,7 @@ been developed with the same philosophy.
 
 A complete help system for exposing API methods, request objects and
 response objects. This is shipped separately so that the run-time
-C<Amazon::API> is a lean as possible.
+C<Amazon::API> is as lean as possible.
 
  # get help for a service
  amzn-api-help sts
