@@ -365,7 +365,7 @@ sub finalize {
   return $self
     if !blessed $self;
 
-  $self->get_logger->debug(
+  $self->get_logger->trace(
     sub {
       return Dumper(
         [ type       => $self->get_type,
@@ -383,7 +383,7 @@ sub finalize {
 
       my $val = $self->get__value;
 
-      $self->get_logger->debug(
+      $self->get_logger->trace(
         Dumper(
           [ type => $type,
             val  => $val
@@ -691,7 +691,7 @@ sub finalize_structure {
 
   my $members = $self->get_members;
 
-  $self->get_logger->debug(
+  $self->get_logger->trace(
     sub {
       return Dumper(
         [ sub     => 'finalize',

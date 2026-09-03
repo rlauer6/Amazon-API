@@ -44,7 +44,7 @@ sub _serialize_structure {
 
   my $members = $this->get_members;
 
-  $self->get_logger->debug(
+  $self->get_logger->trace(
     Dumper [
       class               => ref $this,
       serialize_structure => $this,
@@ -75,7 +75,7 @@ sub _serialize_structure {
     my $shape = $member->{shape};
     my $serialized_data;
 
-    $self->get_logger->debug(
+    $self->get_logger->trace(
       sub {
         return Dumper(
           [ member_name  => $m,
@@ -95,7 +95,7 @@ sub _serialize_structure {
       if $self->get_protocol =~ /^(?:json|rest-json)$/xsm
       && !defined $member_data;
 
-    $self->get_logger->debug(
+    $self->get_logger->trace(
       sub {
         return Dumper(
           [ member       => $m,
@@ -116,7 +116,7 @@ sub _serialize_structure {
       $member_data = $member_data->{content} // $EMPTY;
     }
 
-    $self->get_logger->debug(
+    $self->get_logger->trace(
       sub {
         return Dumper(
           [ member_data   => $member_data,
@@ -151,7 +151,7 @@ sub _serialize_structure {
         ),
       );
 
-      $self->get_logger->debug(
+      $self->get_logger->trace(
         sub {
           return Dumper(
             [ "back from serializing $shape",
@@ -185,7 +185,7 @@ sub _serialize_structure {
       }
     }
 
-    $self->get_logger->debug(
+    $self->get_logger->trace(
       sub {
         return Dumper(
           [ result          => $result,
@@ -209,7 +209,7 @@ sub _serialize_list {
 
   $service ||= $self->get_service;
 
-  $self->get_logger->debug( Dumper( [ 'serialize_list', $this, $data, $service ] ) );
+  $self->get_logger->trace( Dumper( [ 'serialize_list', $this, $data, $service ] ) );
 
   my $member        = $this->get_member;
   my $location_name = $member->{locationName};
@@ -226,7 +226,7 @@ sub _serialize_list {
 
   my $member_shape = $member->{shape};
 
-  $self->get_logger->debug(
+  $self->get_logger->trace(
     Dumper(
       [ 'serialize_list',
         member        => $member,
@@ -247,7 +247,7 @@ sub _serialize_list {
     my @key_values;
 
     if ( $this->{flattened} ) {
-      $self->get_logger->debug(
+      $self->get_logger->trace(
         Dumper(
           [ list      => $list,
             flattened => $this->{flattened}
@@ -279,13 +279,13 @@ sub _serialize_list {
       $list = [$list];
     }
 
-    $self->get_logger->debug( Dumper( [ key_values => $member_shape, \@key_values ] ) );
+    $self->get_logger->trace( Dumper( [ key_values => $member_shape, \@key_values ] ) );
 
     my %result;
 
     foreach my $p ( @{$list} ) {
 
-      $self->get_logger->debug( Dumper( [ p => $p, member_shape => $member_shape ] ) );
+      $self->get_logger->trace( Dumper( [ p => $p, member_shape => $member_shape ] ) );
 
       my $serialized_data = $self->serialize(
         shape   => $member_shape,
@@ -301,7 +301,7 @@ sub _serialize_list {
 
     local $LIST_SEPARATOR = q{,};
 
-    $self->get_logger->debug(
+    $self->get_logger->trace(
       sub {
         return Dumper(
           [ 'ref(self)' => ref($self),
@@ -316,7 +316,7 @@ sub _serialize_list {
   else {
     foreach my $elem ( @{$list} ) {
 
-      $self->get_logger->debug(
+      $self->get_logger->trace(
         sub {
           return Dumper(
             [ shape => $member->{shape},
@@ -356,7 +356,7 @@ sub serialize {
 
   my $protocol = $self->get_protocol;
 
-  $self->get_logger->debug(
+  $self->get_logger->trace(
     sub {
       return Dumper(
         [ shape    => $shape,
@@ -395,10 +395,10 @@ sub serialize {
       my ($response_wrapper) = grep {/response$/ixsm}
         keys %{$data};
 
-      $self->get_logger->debug( Dumper( [ response_wrapper => $response_wrapper ] ) );
+      $self->get_logger->trace( Dumper( [ response_wrapper => $response_wrapper ] ) );
 
       if ($response_wrapper) {
-        $self->get_logger->debug(
+        $self->get_logger->trace(
           Dumper(
             [ response_wrapper => $response_wrapper,
               data             => $data,
@@ -443,7 +443,7 @@ sub serialize {
 
   my $type = $this->get_type;
 
-  $self->get_logger->debug(
+  $self->get_logger->trace(
     sub {
       return Dumper(
         [ class   => $class,
@@ -588,7 +588,7 @@ sub serialize {
       my $key_shape_name   = $this->{key}->{shape};
       my $value_shape_name = $this->{value}->{shape};
 
-      $self->get_logger->debug(
+      $self->get_logger->trace(
         sub {
           return Dumper(
             [ type                => $type,
@@ -606,7 +606,7 @@ sub serialize {
       $data ||= [];
 
       if ( !$key_location_name && !$value_location_name ) {
-        $self->get_logger->debug(
+        $self->get_logger->trace(
           Dumper(
             [ value_shape_name => $value_shape_name,
               data             => $data,
@@ -627,7 +627,7 @@ sub serialize {
       }
 
       foreach my $item ( @{$data} ) {
-        $self->get_logger->debug(
+        $self->get_logger->trace(
           sub {
             return Dumper( [ item => $item ] );
           }
@@ -695,7 +695,7 @@ sub serialize {
     },
   );
 
-  $self->get_logger->debug(
+  $self->get_logger->trace(
     sub {
       return Dumper(
         [ unknown_type => $type,
@@ -721,7 +721,7 @@ sub serialize {
     );
   }
 
-  $self->get_logger->debug( sub { return Dumper( [ result => $result ] ) } );
+  $self->get_logger->trace( sub { return Dumper( [ result => $result ] ) } );
 
   return $result;
 }

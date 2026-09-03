@@ -70,5 +70,3 @@ services.api: \
 .PHONY: update-botocore
 update-botocore: botocore-pull
 
-workdir/requires: requires.cpan-dist | workdir
-	$(NO_ECHO)cp $< $@

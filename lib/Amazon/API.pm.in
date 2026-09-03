@@ -58,7 +58,6 @@ __PACKAGE__->mk_accessors(
     compiled_paginators
     content_type
     credentials
-    debug
     decode_always
     endpoint_prefix
     error
@@ -138,8 +137,7 @@ sub new {
 
   my %options = ref $options[0] ? %{ $options[0] } : @options;
 
-  my $log_level = delete $options{log_level};
-  $log_level //= $options{debug} || $ENV{DEBUG} ? 'debug' : 'error';
+  my $log_level = delete $options{log_level} // 'info';
 
   my $self = $class->SUPER::new( \%options );
 
@@ -157,8 +155,6 @@ sub new {
   $self->_set_defaults( %options, log_level => $log_level );
 
   $self->_set_default_logger($log_level);
-
-  $self->set_log_level( log_level => $log_level );
 
   $self->_create_methods;
 
@@ -178,20 +174,16 @@ sub set_log_level {
 ########################################################################
   my ( $self, $log_level ) = @_;
 
+  $log_level = lc $log_level;
+
   $self->set__log_level($log_level);
 
   my $logger = $self->get_logger;
 
-  return
+  return $self
     if !$logger;
 
-  my $log4perl_level = $LOG4PERL_LOG_LEVELS{$log_level};
-
-  $logger->level($log4perl_level);
-
-  if ( ref($logger) =~ /Log4perl/xsm ) {
-    Log::Log4perl->get_logger->level($log4perl_level);
-  }
+  $logger->level( $LOG4PERL_LOG_LEVELS{$log_level} );
 
   return $self;
 }
@@ -351,7 +343,7 @@ sub decode_response {
 
   $content = defined $decoded_content ? $decoded_content : $content;
 
-  $self->get_logger->debug(
+  $self->get_logger->trace(
     sub {
       return Dumper( [ content => $content ] );
     }
@@ -470,7 +462,7 @@ sub decode_response {
     $content = $content->{ $output->{resultWrapper} };
   }
 
-  $self->get_logger->debug(
+  $self->get_logger->trace(
     sub {
       return Dumper(
         [ content                => $content,
@@ -892,7 +884,7 @@ sub init_botocore_request {
   else {
     my $finalized_request = $request->finalize($protocol);
 
-    $self->get_logger->debug(
+    $self->get_logger->trace(
       sub {
         return Dumper(
           [ request           => $request,
@@ -916,7 +908,7 @@ sub init_botocore_request {
       return $finalized_request;
     }
 
-    $self->get_logger->debug(
+    $self->get_logger->trace(
       sub {
         return Dumper( [ finalized_request => $finalized_request, ] );
       }
@@ -936,7 +928,7 @@ sub init_botocore_request {
 
     my $request_uri_tpl = $http->{parsed_request_uri}->{request_uri_tpl};
 
-    $self->get_logger->debug(
+    $self->get_logger->trace(
       sub {
         return Dumper(
           [ args               => \@args,
@@ -966,7 +958,7 @@ sub init_botocore_request {
 
       my $shape_parameters = $parameters{$shape};
 
-      $self->get_logger->debug(
+      $self->get_logger->trace(
         sub {
           return Dumper(
             [ requestUri       => $uri,
@@ -1125,7 +1117,7 @@ sub init_botocore_request {
 
   my $content = $self->_resolve_request_content( $request_shape_name, $protocol, $method, \%parameters );
 
-  $self->get_logger->debug(
+  $self->get_logger->trace(
     sub {
       return Dumper [
         namespace   => $self->get_namespace,
@@ -1475,7 +1467,7 @@ sub invoke_api {
 
   my $protocol = eval { $self->get_botocore_metadata->{protocol}; };
 
-  $self->get_logger->debug(
+  $self->get_logger->trace(
     sub {
       return Dumper(
         [ parameters      => $parameters,
@@ -1542,7 +1534,7 @@ sub invoke_api {
 
   my $serialized_content = $self->serialize_content($parameters);
 
-  $self->get_logger->debug(
+  $self->get_logger->trace(
     sub {
       Dumper [
         content_type       => $content_type,
@@ -1568,7 +1560,7 @@ sub invoke_api {
       headers      => $headers,
     );
 
-    $self->get_logger->debug(
+    $self->get_logger->trace(
       sub {
         return Dumper(
           [ decode_always => $self->get_decode_always,
@@ -1604,7 +1596,7 @@ sub invoke_api {
       next;
     }
 
-    $self->get_logger->debug(
+    $self->get_logger->trace(
       sub {
         return Dumper(
           [ paginator     => $legacy_paginator,
@@ -1621,7 +1613,7 @@ sub invoke_api {
 
     push @paged_results, @{$actual_result};
 
-    $self->get_logger->debug(
+    $self->get_logger->trace(
       sub {
         return Dumper(
           [ result        => $actual_result,
@@ -1761,7 +1753,7 @@ sub get_valid_token {
     }
   }
 
-  $self->get_logger->trace( sub { return Dumper( [ 'valid token:', $credentials->get_token ] ) } );
+  $self->get_logger->trace('valid session token present');
 
   return $credentials->get_token;
 }
@@ -1771,7 +1763,7 @@ sub submit {
 ########################################################################
   my ( $self, %options ) = @_;
 
-  $self->get_logger->debug( sub { return Dumper [ submit => \%options ] } );
+  $self->get_logger->trace( sub { return Dumper [ submit => $self->_sanitize( \%options ) ] } );
 
   my $method  = $self->get_http_method || 'POST';
   my $headers = $options{headers}      || [];
@@ -1787,12 +1779,12 @@ sub submit {
     $url .= $self->get_request_uri;
   }
 
-  $self->get_logger->debug(
+  $self->get_logger->trace(
     sub {
       return Dumper [
         method  => $method,
         url     => $url,
-        headers => $headers
+        headers => $self->_sanitize($headers),
       ];
     }
   );
@@ -1840,13 +1832,13 @@ sub submit {
     region          => $region,
   )->sign( $request, $self->get_region );
 
-  $self->get_logger->debug( sub { return Dumper( [ request => $request ] ) } );
+  $self->get_logger->trace( sub { return Dumper( [ request => $self->_sanitize($request) ] ) } );
 
   # make the request, return response object
   my $ua  = $self->get_user_agent;
   my $rsp = $ua->request($request);
 
-  $self->get_logger->debug(
+  $self->get_logger->trace(
     sub {
       return Dumper [ response => $rsp ];
     }
@@ -2001,12 +1993,6 @@ sub has_keys {
 sub _unpack_args {
 ########################################################################
   my ( $self, $args, @var_names ) = @_;
-
-  $self->get_logger->debug(
-    sub {
-      return Dumper( [ args => $args ] );
-    }
-  );
 
   return @{$args}
     if @{$args} > 1 || !ref $args->[0];
@@ -2221,15 +2207,7 @@ sub _set_defaults {
     $self->set_region($region);
   }
 
-  my $log_level = $options{log_level};
-
-  if ( !$log_level || $log_level !~ /\A(?:debug|trace)\z/xsm ) {
-    $self->set_no_logger($TRUE);
-  }
-
-  else {
-    $self->set_log_level($log_level);
-  }
+  $self->set_log_level( $options{log_level} );
 
   if ( !$self->get_credentials ) {
     if ( $self->has_keys(%options) ) {
@@ -2348,8 +2326,8 @@ sub _set_request_content {
     sub {
       return Dumper(
         [ method       => $self->get_http_method,
-          args         => \%args,
-          request      => $request,
+          args         => $self->_sanitize( \%args ),
+          request      => $self->_sanitize($request),
           content      => $content,
           content_type => $content_type
         ]
@@ -2367,7 +2345,7 @@ sub _set_request_content {
     $request->uri( $request->uri . $QUESTION_MARK . $content );
   }
 
-  $self->get_logger->debug( sub { return Dumper( [ request => $request ] ); } );
+  $self->get_logger->trace( sub { return Dumper( [ request => $self->_sanitize($request) ] ); } );
 
   return $request;
 }
@@ -2385,25 +2363,17 @@ sub _to_xml {
 
   # Handle hash references (nested structures)
   elsif ( ref $value eq 'HASH' ) {
-    my %attrs
-      = exists $value->{_attr}
-      ? %{ $value->{_attr} }
-      : ();
+    my %attrs = exists $value->{_attr} ? %{ $value->{_attr} } : ();
 
     my $element = XML::Twig::Elt->new( $key, \%attrs, );
 
     if ( exists $value->{_text} ) {
-      $element->set_text(
-        defined $value->{_text}
-        ? $value->{_text}
-        : $EMPTY
-      );
+      $element->set_text( defined $value->{_text} ? $value->{_text} : $EMPTY );
     }
 
     for my $subkey ( keys %{$value} ) {
       next
-        if $subkey eq '_attr'
-        || $subkey eq '_text';
+        if $subkey eq '_attr' || $subkey eq '_text';
 
       $_->paste( last_child => $element )
         for _to_xml( $subkey, $value->{$subkey}, );
@@ -2416,6 +2386,67 @@ sub _to_xml {
   else {
     return XML::Twig::Elt->new( $key, defined $value ? $value : $EMPTY );
   }
+}
+
+########################################################################
+sub _sanitize {
+########################################################################
+  my ( $self, $value ) = @_;
+
+  my %sensitive_headers = map { $_ => $TRUE } qw(
+    authorization
+    x-amz-security-token
+  );
+
+  if ( blessed($value) && $value->isa('HTTP::Request') ) {
+    my $request = $value->clone;
+
+    foreach my $header_name ( $request->header_field_names ) {
+      next
+        if !$sensitive_headers{ lc $header_name };
+
+      $request->header( $header_name => '[REDACTED]' );
+    }
+
+    return $request;
+  }
+
+  if ( ref $value && reftype($value) eq 'HASH' ) {
+    my %copy;
+
+    foreach my $key ( keys %{$value} ) {
+      if ( $sensitive_headers{ lc $key } ) {
+        $copy{$key} = '[REDACTED]';
+        next;
+      }
+
+      $copy{$key} = $self->_sanitize( $value->{$key} );
+    }
+
+    return \%copy;
+  }
+
+  if ( ref $value && reftype($value) eq 'ARRAY' ) {
+    my @copy;
+
+    for ( my $i = 0; $i < @{$value}; $i++ ) {
+      my $item = $value->[$i];
+
+      if ( !ref $item
+        && $sensitive_headers{ lc $item }
+        && $i + 1 < @{$value} ) {
+        push @copy, $item, '[REDACTED]';
+        $i++;
+        next;
+      }
+
+      push @copy, $self->_sanitize($item);
+    }
+
+    return \@copy;
+  }
+
+  return $value;
 }
 
 1;
@@ -2991,14 +3022,6 @@ obtaining credentials.>
 
 =back
 
-=item debug
-
-Set debug to a true value to enable debug messages. Debug mode will
-dump the request and response from all API calls. You can also set the
-environment variable DEBUG to enable debugging output.
-
-default: false
-
 =item decode_always
 
 Set C<decode_always> to a true value to return Perl objects from API
@@ -3026,6 +3049,22 @@ default: POST
 =item last_action
 
 The last method call invoked.
+
+=item log_level
+
+Sets the diagnostic logging level. The default is C<info>, which
+suppresses the C<debug> and C<trace> diagnostic messages emitted by
+C<Amazon::API>.
+
+Set this to C<debug> for operational diagnostics or C<trace> for
+low-level protocol and serialization diagnostics. Trace-level logging
+may contain sensitive application data; see L</Trace logging and
+sensitive data>.
+
+The logging level may also be changed after construction with
+C<set_log_level>.
+
+default: info
 
 =item no_logger
 
@@ -3632,8 +3671,12 @@ requests from the AWS CLI using the C<--debug> option.
 
 =over 10 
 
-=item 1. Set the C<debug> option to true to see the request object and
-the response object from C<Amazon::API>.
+=item 1. Set log_level to "trace" to see low-level request and response
+diagnostics from C<Amazon::API>.
+
+B<Trace output may contain sensitive application data; see
+"Trace logging and sensitive data".>
+
 
 =item 2. Excecute the AWS CLI with the --debug option and compare the
 request and response with that of your calls.
@@ -3660,35 +3703,38 @@ This documentation refers to version @PACKAGE_VERSION@ of C<Amazon::API>.
 
 =head1 DIAGNOSTICS
 
-To enable diagnostic output, set C<debug> to a true value when calling
-the constructor. You can also set the C<DEBUG> environment variable to a
-true value to enable diagnostics.
+To enable diagnostic output, set log_level to C<debug> or C<trace>.
 
 =head2 Logging
 
-By default L<Amazon::API> creates a L<Log::Log4perl> logger to
-log at the DEBUG and TRACE levels. Setting the environment variable
-DEBUG to some value or passing a true value for C<debug> in the
-constructor will trigger extremely verbose logging. This is to help
-debug edge cases especially around serialization which is
-particularly prone to exceptions and API specific scenarios.
+C<Amazon::API> uses Log::Log4perl for diagnostic logging. The default log
+level is INFO, which suppresses the DEBUG and TRACE diagnostic messages
+emitted by C<Amazon::API>.
 
-If you pass a logger to the constructor, C<Amazon::API> will attempt
-to use that if it has the appropriate logging level methods (error,
-warn, info, debug, trace, level). If L<Log::Log4perl> is unavailable
-and you do not pass a logger, logging is essentially disabled at any
-level.
+Set log_level to "debug" for operational diagnostic logging or "trace"
+for low-level protocol and serialization diagnostics.
 
-If, for some reason you set the enviroment variable DEBUG to a true
-value or have your own Log4perl logger set at the debug level but do
-not want C<Amazon::API> to log messages at that level you can turn off
-logging as shown below:
+I<Note however that TRACE level logging may expose potentially
+sensitive application level data>.
 
- my $ec2 = Amazon::API::EC2->new(log_level => 'info');
+=head2 Trace logging and sensitive data
 
-In other words, do not send a logger but send a log level. The
-constructor will recognize that you have a Log4perl logger initialized
-and just set its log level to your desired level.
+Trace-level logging is intended for low-level diagnostic use and may
+include API request parameters, response payloads, serialized values,
+pagination tokens, and other application data.
+
+Although C<Amazon::API> sanitizes AWS credential and authentication
+material before logging, application payloads are not guaranteed to be
+redacted. Depending on the AWS service and operation, trace output may
+therefore contain sensitive values such as passwords, secrets, tokens,
+keys, or personally identifiable information.
+
+Logging at the C<debug> level is intended to be operationally safe;
+C<trace> is explicitly diagnostic and may contain sensitive application
+data.
+
+Trace logging should be enabled only when necessary and trace logs
+should be handled as potentially sensitive data.
 
 =head1 BUGS AND LIMITATIONS
 

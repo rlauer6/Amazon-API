@@ -1,3 +1,4 @@
 HTTP::Request 7.01
+HTTP::Response 7.01
 JSON::PP 4.16
 URI 5.34

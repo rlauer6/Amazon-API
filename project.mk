@@ -63,6 +63,14 @@ cpan-dist: workdir/buildspec-api.yml \
 	  rm -rf workdir; \
 	fi
 
+requires.cpan-dist: share/stub.pm.tmpl
+	$(NO_ECHO)tmpdir="$$(mktemp -d)"; trap 'rm -rf $$tmpdir' EXIT; \
+	PERL5LIB=../lib:$$PERL5LIB $(AMAZON_API) -b $(BOTOCORE_PATH) -s sts -m STS -o $$tmpdir create-stub; \
+	$(SCANDEPS) -r --no-core --min-core-version 5.10 $$tmpdir/Amazon/API/STS.pm  > $@
+
+workdir/requires: requires.cpan-dist | workdir
+	$(NO_ECHO)cp $< $@
+
 workdir/service.api: \
     $(BOTOCORE_PATH) \
     $(AMAZON_API) \

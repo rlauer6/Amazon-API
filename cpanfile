@@ -5,6 +5,7 @@ requires "Class::Accessor::Fast", "0.51";
 requires "Data::UUID", "1.227";
 requires "File::ShareDir", "1.118";
 requires "HTTP::Request", "7.01";
+requires "HTTP::Response", "7.01";
 requires "HTTP::Tiny", "0.088";
 requires "JSON", "4.10";
 requires "JSON::PP", "4.16";

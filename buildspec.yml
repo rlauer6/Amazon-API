@@ -20,19 +20,20 @@ extra-files:
   - LICENSE.botocore
   -
     share:
-      - README.md
-      - release-notes.md
-      - services.api
-      - botocore-metadata.api
       - Amazon-API.pem
-      - botocore.mk
-      - module-names.json
-      - botocore-version.json
-      - share/stub.pm.tmpl
-      - buildspec-api.yml.in
+      - LICENSE.botocore
       - NOTICE
       - NOTICE.botocore
-      - LICENSE.botocore
+      - README.md
+      - botocore-metadata.api
+      - botocore-version.json
+      - botocore.mk
+      - buildspec-api.yml.in
+      - module-names.json
+      - release-notes.md
+      - requires.cpan-dist
+      - services.api
+      - share/stub.pm.tmpl
 resources:
   bugtracker:
     mailto: rclauer@gmail.com

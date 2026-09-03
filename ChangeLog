@@ -1,6 +1,61 @@
+Thu Sep  3 12:21:15 2026  Rob Lauer  <rclauer@gmail.com>
+
+	[2.7.3]:
+	* VERSION: bump
+	* release-notes: updated
+	* release-notes/release-notes-2.7.3.md: new
+	* buildspec.yml: +requires.cpan-dist
+	* lib/Amazon/API.pm.in
+	- note in pod regarding use of DEBUG environment variable
+	- pod updates to explain logging
+	(new)
+	- enabling debug logging using DEBUG environment variable has been disabled
+	- removed debug option
+	- set default log level => info
+	- no need to set log level again
+	(set_log_level)
+	- refactored, simplified
+	- lc log level for consistency
+	(_set_defaults): set log level from options
+	(get_valid_token)
+	- remove potentially sensitive data from logs
+	(decode_response)
+	- log at trace level instead of debug
+	(init_botocore_request): likewise
+	(invoke_api): likewise
+	(submit): likewise
+	(_set_request_content): likewise
+	(submit): likewise
+	(_set_request_content): likewise
+	(_sanitize): new
+	(_to_xml): whitespace
+	(_unpack_args): remove logging
+	* lib/Amazon/API/Botocore/Shape.pm.in
+	(finalize)
+	- log at trace level instead of debug
+	(finalize_structure): likewise
+	* lib/Amazon/API/Botocore/Shape/Serializer.pm.in
+	(_serialize_structure)
+	- log at trace level instead of debug
+	(_serialize_list): likewise
+	(serialize): likewise
+	* test-requires: +HTTP::Response
+	* cpanfile: likewise
+	* t/12-logging.t: new
+	* requires.cpan
+	- +Amazon::API@2.7.3, +Amazon::API::Botocore::Shape::Utils, -JSON, +File::ShareDir
+	* botocore.mk
+	(workdir/requires): moved to project.mk
+	* project.mk
+	(workdir/requires): added from above
+	(requires.cpan-dist): new recipe
+
 Wed Sep  2 10:23:25 2026  Rob Lauer  <rclauer@gmail.com>
 
 	[2.7.2]:
+	* VERSION: bump
+	* release-notes: updated
+	* release-notes/release-notes-2.7.2.md: new
 	* .gitignore: **/*.pl, **/*.pm
 	* Makefile: update by CPAN::Maker::Bootstrapper
 	* builder: likewise
