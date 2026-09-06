@@ -30,6 +30,7 @@ extra-files:
       - botocore.mk
       - buildspec-api.yml.in
       - module-names.json
+      - partitions.json
       - release-notes.md
       - requires.cpan-dist
       - services.api

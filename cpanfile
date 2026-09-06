@@ -1,6 +1,7 @@
 requires "Amazon::Credentials", "1.3.2";
-requires "Amazon::Signature4::Lite", "1.0.2";
+requires "Amazon::Signature4::Lite", "1.0.5";
 requires "CLI::Simple", "2.2.2";
+requires "CLI::Simple::Utils", "2.2.2";
 requires "Class::Accessor::Fast", "0.51";
 requires "Data::UUID", "1.227";
 requires "File::ShareDir", "1.118";

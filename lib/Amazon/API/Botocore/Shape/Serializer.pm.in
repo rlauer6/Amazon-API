@@ -258,7 +258,7 @@ sub _serialize_list {
       my @flattened_list;
 
       foreach ( keys %{$list} ) {
-        if ( reftype( $list->{$_} ) eq 'ARRAY' ) {
+        if ( $list->{$_} && ref $list->{$_} && reftype( $list->{$_} ) eq 'ARRAY' ) {
           push @flattened_list, @{ $list->{$_} };
         }
       }
@@ -369,52 +369,6 @@ sub serialize {
     }
   );
 
-  # this is a hack to deal with the way XML responses are ambiguously
-  # returned by rest-xml services and ec2 APIs...sometimes there is a
-  # response wrapper that is never articulated in the Botocore
-  # metadata...sometimes it is the name of the top-level shape.
-  #
-  # "$exists" tells us the shape was not found, but it may now be in the
-  # data structure if this was a deserialized XML payload and the shape
-  # name was the wrapper.
-  #
-  # We really only want to do this on the top level element but we'll
-  # see if this works consistently when serializing all elements below
-  # the root.
-  #
-  # I hate you botocore!!!!
-  #
-  if ( !$exists ) {
-    # if the shape name exists in the data, then that is our data to
-    # serialize.
-    if ( ref $data && exists $data->{$shape} ) {
-      $data = $data->{$shape};
-    }
-    # else this may be ec2 with a response wrapper
-    elsif ( ref $data && reftype($data) eq 'HASH' && $self->get_protocol =~ /^(?:query|ec2)$/xsm ) {
-      my ($response_wrapper) = grep {/response$/ixsm}
-        keys %{$data};
-
-      $self->get_logger->trace( Dumper( [ response_wrapper => $response_wrapper ] ) );
-
-      if ($response_wrapper) {
-        $self->get_logger->trace(
-          Dumper(
-            [ response_wrapper => $response_wrapper,
-              data             => $data,
-              shape            => $shape
-            ]
-          )
-        );
-        $data   = $data->{$response_wrapper};
-        $exists = $TRUE;
-        if ( exists $data->{$shape} ) {
-          $data = $data->{$shape};
-        }
-      }
-    }
-  }
-
   my $class = require_shape( $shape, $service );
 
   croak "unable to require class for $shape: $EVAL_ERROR\n"
@@ -431,14 +385,47 @@ sub serialize {
   return $data
     if $this->{document};
 
-  # for REST-XML root-name unwrap immediately
-  if (!$exists
-    && $protocol eq 'rest-xml'
-    && $this->{locationName}
-    && ref $data
-    && reftype($data) eq 'HASH'
-    && exists $data->{ $this->{locationName} } ) {
-    $data = $data->{ $this->{locationName} };
+  if ( !$exists && ref $data && reftype($data) eq 'HASH' ) {
+
+    if ( $self->get_protocol eq 'rest-xml' ) {
+
+      if ( exists $data->{$shape} ) {
+        $data = $data->{$shape};
+      }
+      elsif ( $this->{locationName} && exists $data->{ $this->{locationName} } ) {
+        $data = $data->{ $this->{locationName} };
+      }
+      elsif ( keys %{$data} == 1 ) {
+        my ($root) = keys %{$data};
+
+        my $members = $this->get_members // {};
+
+        my $is_modeled_member = any {
+          my $member = $members->{$_};
+
+          my $location_name = $member->{locationName} // $_;
+
+          $root eq $location_name;
+          }
+          keys %{$members};
+
+        if ( !$is_modeled_member ) {
+          $data = $data->{$root};
+        }
+      }
+    }
+    elsif ( $self->get_protocol =~ /^(?:query|ec2)$/ ) {
+      my ($response_wrapper) = grep {/response$/i} keys %{$data};
+
+      if ($response_wrapper) {
+        $data   = $data->{$response_wrapper};
+        $exists = $TRUE;
+
+        if ( exists $data->{$shape} ) {
+          $data = $data->{$shape};
+        }
+      }
+    }
   }
 
   my $type = $this->get_type;

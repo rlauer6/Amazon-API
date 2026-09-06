@@ -1,4 +1,6 @@
+CLI::Simple::Utils 2.2.2
 HTTP::Request 7.01
 HTTP::Response 7.01
 JSON::PP 4.16
+Role::Tiny::With 2.002004
 URI 5.34

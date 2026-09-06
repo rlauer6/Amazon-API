@@ -1,3 +1,5 @@
-Amazon::API                           2.7.3
-Amazon::API::Botocore::Shape::Utils   2.7.3
+Amazon::API                           2.8.0
+Amazon::API::Botocore::Shape::Utils   2.8.0
+Amazon::API::ServiceHook              0
 File::ShareDir                        1.118
+Role::Tiny::With                      2.002004

@@ -1,0 +1,687 @@
+package Amazon::API::EndpointResolver;
+
+use strict;
+use warnings;
+
+use 5.010;
+
+use parent qw(Class::Accessor::Fast);
+
+use Carp;
+use CLI::Simple::Utils qw(slurp_json);
+use English qw(-no_match_vars);
+use File::ShareDir qw(dist_file);
+use Scalar::Util qw(reftype);
+
+our $VERSION = '@PACKAGE_VERSION@'; ## no critic (RequireInterpolationOfMetachars)
+
+use Readonly;
+Readonly::Hash my %FUNCTIONS => (
+  booleanEquals                   => '_boolean_equals',
+  getAttr                         => '_get_attr',
+  isSet                           => '_is_set',
+  not                             => '_not',
+  stringEquals                    => '_string_equals',
+  substring                       => '_substring',
+  'aws.partition'                 => '_aws_partition',
+  parseURL                        => '_parse_url',
+  uriEncode                       => '_uri_encode',
+  isValidHostLabel                => '_is_valid_host_label',
+  'aws.isVirtualHostableS3Bucket' => '_aws_is_virtual_hostable_s3_bucket',
+  'aws.parseArn'                  => '_aws_parse_arn',
+);
+
+Readonly::Hash my %BOOLEAN_FUNCTIONS => (
+  booleanEquals => 1,
+  isSet         => 1,
+  not           => 1,
+  stringEquals  => 1,
+);
+
+__PACKAGE__->follow_best_practice;
+
+__PACKAGE__->mk_accessors(
+  qw(
+    endpoint_rule_set
+    partitions
+  )
+);
+
+########################################################################
+sub new {
+########################################################################
+  my ( $class, @options ) = @_;
+
+  my %options = ref $options[0] ? %{ $options[0] } : @options;
+
+  my $rule_set = $options{endpoint_rule_set};
+
+  croak 'endpoint_rule_set is required'
+    if !defined $rule_set;
+
+  croak 'endpoint_rule_set must be a hash reference'
+    if !ref $rule_set || reftype($rule_set) ne 'HASH';
+
+  $options{partitions} //= $class->_load_partitions;
+
+  my $self = $class->SUPER::new( \%options );
+
+  return $self;
+}
+
+{
+  my $partitions;
+
+  ########################################################################
+  sub _load_partitions {
+    ########################################################################
+    my ($class) = @_;
+
+    return $partitions
+      if $partitions;
+
+    my $file = dist_file( 'Amazon-API', 'partitions.json', );
+
+    $partitions = slurp_json($file);
+
+    return $partitions;
+  }
+}
+
+########################################################################
+sub resolve {
+########################################################################
+  my ( $self, @options ) = @_;
+
+  my %parameters = ref $options[0] ? %{ $options[0] } : @options;
+
+  my $rule_set = $self->get_endpoint_rule_set;
+
+  croak 'unsupported endpoint rule set version'
+    if !defined $rule_set->{version} || $rule_set->{version} ne '1.0';
+
+  my $scope = $self->_initialize_parameters( \%parameters );
+
+  my $endpoint = $self->_evaluate_rules( $rule_set->{rules}, $scope, 0, );
+
+  croak 'endpoint rule set exhausted without a result'
+    if !defined $endpoint;
+
+  return $endpoint;
+}
+
+########################################################################
+sub _initialize_parameters {
+########################################################################
+  my ( $self, $supplied ) = @_;
+
+  my $definitions = $self->get_endpoint_rule_set->{parameters} // {};
+
+  foreach my $name ( keys %{$supplied} ) {
+    croak "unknown endpoint parameter '$name'"
+      if !exists $definitions->{$name};
+  }
+
+  my %scope;
+
+  foreach my $name ( keys %{$definitions} ) {
+    my $definition = $definitions->{$name};
+
+    if ( exists $supplied->{$name} ) {
+      $scope{$name} = $supplied->{$name};
+      next;
+    }
+
+    if ( exists $definition->{default} ) {
+      $scope{$name} = $definition->{default};
+      next;
+    }
+
+    croak "endpoint parameter '$name' is required"
+      if $definition->{required};
+  }
+
+  return \%scope;
+}
+
+########################################################################
+sub _evaluate_rules {
+########################################################################
+  my ( $self, $rules, $parent_scope, $tree ) = @_;
+
+  foreach my $rule ( @{$rules} ) {
+    my %scope = %{$parent_scope};
+
+    next
+      if !$self->_conditions_match( $rule->{conditions}, \%scope, );
+
+    my $type = $rule->{type} // q{};
+
+    if ( $type eq 'tree' ) {
+      my $result = $self->_evaluate_rules( $rule->{rules}, \%scope, 1, );
+
+      return $result;
+    }
+
+    if ( $type eq 'endpoint' ) {
+      return $self->_render_endpoint( $rule->{endpoint}, \%scope, );
+    }
+
+    if ( $type eq 'error' ) {
+      croak $self->_render_value( $rule->{error}, \%scope, );
+    }
+
+    croak "unsupported endpoint rule type '$type'";
+  }
+
+  croak 'endpoint tree exhausted without a result'
+    if $tree;
+
+  return;
+}
+
+########################################################################
+sub _conditions_match {
+########################################################################
+  my ( $self, $conditions, $scope ) = @_;
+
+  foreach my $condition ( @{ $conditions // [] } ) {
+    my $result = $self->_evaluate_expression( $condition, $scope, );
+
+    my $function = $condition->{fn};
+
+    if ( $BOOLEAN_FUNCTIONS{$function} ) {
+      return 0
+        if !$result;
+    }
+    else {
+      return 0
+        if !defined $result;
+    }
+
+    if ( exists $condition->{assign} ) {
+      $scope->{ $condition->{assign} } = $result;
+    }
+  }
+
+  return 1;
+}
+
+########################################################################
+sub _evaluate_expression {
+########################################################################
+  my ( $self, $expression, $scope ) = @_;
+
+  croak 'endpoint expression must be a hash reference'
+    if !ref $expression || reftype($expression) ne 'HASH';
+
+  if ( exists $expression->{ref} ) {
+    return $scope->{ $expression->{ref} };
+  }
+
+  my $function = $expression->{fn};
+
+  croak 'endpoint expression has no function'
+    if !defined $function;
+
+  my $method = $FUNCTIONS{$function};
+
+  croak "unsupported endpoint function '$function'"
+    if !defined $method;
+
+  my @args = map { $self->_evaluate_value( $_, $scope ) } @{ $expression->{argv} // [] };
+
+  return $self->$method(@args);
+}
+
+########################################################################
+sub _evaluate_value {
+########################################################################
+  my ( $self, $value, $scope ) = @_;
+
+  return $self->_render_template( $value, $scope )
+    if !ref $value;
+
+  my $type = reftype($value);
+
+  if ( $type eq 'HASH' ) {
+    if ( exists $value->{ref} || exists $value->{fn} ) {
+      return $self->_evaluate_expression( $value, $scope );
+    }
+
+    my %result;
+
+    foreach my $key ( keys %{$value} ) {
+      $result{$key} = $self->_evaluate_value( $value->{$key}, $scope, );
+    }
+
+    return \%result;
+  }
+
+  if ( $type eq 'ARRAY' ) {
+    return [ map { $self->_evaluate_value( $_, $scope ) } @{$value} ];
+  }
+
+  # JSON boolean objects and similar scalar references are literals.
+  return $value;
+}
+
+########################################################################
+sub _boolean_equals {
+########################################################################
+  my ( $self, $left, $right ) = @_;
+
+  return ( $left ? 1 : 0 ) == ( $right ? 1 : 0 );
+}
+
+########################################################################
+sub _is_set {
+########################################################################
+  my ( $self, $value ) = @_;
+
+  return defined $value ? 1 : 0;
+}
+
+########################################################################
+sub _not {
+########################################################################
+  my ( $self, $value ) = @_;
+
+  return $value ? 0 : 1;
+}
+
+########################################################################
+sub _parse_url {
+########################################################################
+  my ( $self, $value ) = @_;
+
+  return
+    if !defined $value;
+
+  return
+    if $value !~ m{
+      \A
+      (https?)
+      :
+      //
+      ([^/?#]+)
+      ([^?#]*)
+      (?:[?][^#]*)?
+      (?:[#].*)?
+      \z
+    }xsm;
+
+  my ( $scheme, $authority, $path ) = ( $1, $2, $3 );
+
+  $path = q{}
+    if !defined $path;
+
+  my $normalized_path = $path;
+
+  if ( $normalized_path eq q{} ) {
+    $normalized_path = '/';
+  }
+  elsif ( $normalized_path !~ m{/\z}xsm ) {
+    $normalized_path .= '/';
+  }
+
+  my $host = $authority;
+
+  # Strip the port before determining whether the authority is an IP.
+  if ( $host =~ /^\[([^\]]+)\](?::\d+)?$/xsm ) {
+    $host = $1;
+  }
+  else {
+    $host =~ s/:\d+\z//xsm;
+  }
+
+  my $is_ip
+    = $host =~ /^\d{1,3}(?:[.]\d{1,3}){3}$/xsm || $host =~ /:/xsm
+    ? 1
+    : 0;
+
+  return {
+    scheme         => $scheme,
+    authority      => $authority,
+    path           => $path,
+    normalizedPath => $normalized_path,
+    isIp           => $is_ip,
+  };
+}
+
+########################################################################
+sub _aws_is_virtual_hostable_s3_bucket {
+########################################################################
+  my ( $self, $bucket, $allow_subdomains ) = @_;
+
+  return 0
+    if !defined $bucket;
+
+  return 0
+    if length $bucket < 3
+    || length $bucket > 63;
+
+  return 0
+    if $bucket =~ /[A-Z_]/xsm;
+
+  return 0
+    if $bucket =~ /^[.]/xsm
+    || $bucket =~ /[.]\z/xsm
+    || $bucket =~ /[.][.]/xsm;
+
+  return 0
+    if $bucket =~ /^\d{1,3}(?:[.]\d{1,3}){3}\z/xsm;
+
+  return $self->_is_valid_host_label( $bucket, $allow_subdomains );
+}
+
+########################################################################
+sub _is_valid_host_label {
+########################################################################
+  my ( $self, $value, $allow_subdomains ) = @_;
+
+  return 0
+    if !defined $value
+    || $value eq q{};
+
+  my @labels
+    = $allow_subdomains
+    ? split /[.]/xsm, $value
+    : ($value);
+
+  foreach my $label (@labels) {
+    return 0
+      if length $label < 1
+      || length $label > 63;
+
+    return 0
+      if $label !~ /^[A-Za-z0-9](?:[A-Za-z0-9-]*[A-Za-z0-9])?$/xsm;
+  }
+
+  return 1;
+}
+
+########################################################################
+sub _uri_encode {
+########################################################################
+  my ( $self, $value ) = @_;
+
+  return
+    if !defined $value;
+
+  my $encoded = $value;
+
+  $encoded =~ s{
+    ([^A-Za-z0-9\-._~])
+  }{
+    sprintf '%%%02X', ord $1
+  }gexsm;
+
+  return $encoded;
+}
+
+########################################################################
+sub _aws_parse_arn {
+########################################################################
+  my ( $self, $arn ) = @_;
+
+  return
+    if !defined $arn;
+
+  my @parts = split /:/xsm, $arn, 6;
+
+  return
+    if @parts != 6
+    || $parts[0] ne 'arn';
+
+  my ( undef, $partition, $service, $region, $account_id, $resource ) = @parts;
+
+  return
+       if $partition eq q{}
+    || $service eq q{}
+    || $resource eq q{};
+
+  my @resource_id = split m{[:/]}xsm, $resource, -1;
+
+  return {
+    partition  => $partition,
+    service    => $service,
+    region     => $region,
+    accountId  => $account_id,
+    resourceId => \@resource_id,
+  };
+}
+
+########################################################################
+sub _substring {
+########################################################################
+  my ( $self, $value, $start, $stop, $reverse ) = @_;
+
+  return
+       if !defined $value
+    || !defined $start
+    || !defined $stop;
+
+  if ($reverse) {
+    my $length = length $value;
+
+    $start = $length - $start;
+    $stop  = $length - $stop;
+  }
+
+  return
+       if $start < 0
+    || $stop < 0
+    || $stop < $start;
+
+  return substr $value, $start, $stop - $start;
+}
+
+########################################################################
+sub _string_equals {
+########################################################################
+  my ( $self, $left, $right ) = @_;
+
+  return 0
+    if !defined $left || !defined $right;
+
+  return $left eq $right;
+}
+
+########################################################################
+sub _get_attr {
+########################################################################
+  my ( $self, $value, $path ) = @_;
+
+  return
+    if !defined $value;
+
+  my @path;
+
+  if ( ref $path && reftype($path) eq 'ARRAY' ) {
+    @path = @{$path};
+  }
+  else {
+    foreach my $part ( split /[.]/xsm, $path ) {
+      if ( $part =~ /^([^\[\]]+)((?:\[\d+\])*)$/xsm ) {
+        push @path, $1;
+
+        my $indexes = $2;
+
+        while ( $indexes =~ /\[(\d+)\]/xsmg ) {
+          push @path, 0 + $1;
+        }
+
+        next;
+      }
+
+      return;
+    }
+  }
+
+  foreach my $part (@path) {
+    if ( ref $value && reftype($value) eq 'HASH' ) {
+      return
+        if !exists $value->{$part};
+
+      $value = $value->{$part};
+      next;
+    }
+
+    if ( ref $value && reftype($value) eq 'ARRAY' && $part =~ /^\d+$/xsm ) {
+      return
+        if $part > $#{$value};
+
+      $value = $value->[$part];
+      next;
+    }
+
+    return;
+  }
+
+  return $value;
+}
+
+########################################################################
+sub _aws_partition {
+########################################################################
+  my ( $self, $region ) = @_;
+
+  return
+    if !defined $region;
+
+  my $partitions = $self->get_partitions->{partitions};
+
+  return
+    if !$partitions;
+
+  # Prefer an explicitly enumerated region.
+  foreach my $partition ( @{$partitions} ) {
+    next
+      if !$partition->{regions};
+
+    if ( exists $partition->{regions}->{$region} ) {
+      return { %{ $partition->{outputs} } };
+    }
+  }
+
+  # Fall back to the partition's region pattern.
+  foreach my $partition ( @{$partitions} ) {
+    my $regex = $partition->{regionRegex};
+
+    next
+      if !defined $regex;
+
+    if ( $region =~ /$regex/xsm ) {
+      return { %{ $partition->{outputs} } };
+    }
+  }
+
+  return;
+}
+
+########################################################################
+sub _render_endpoint {
+########################################################################
+  my ( $self, $endpoint, $scope ) = @_;
+
+  croak 'endpoint result must be a hash reference'
+    if !ref $endpoint || reftype($endpoint) ne 'HASH';
+
+  return {
+    url        => $self->_render_value( $endpoint->{url}, $scope ),
+    properties => $self->_render_data( $endpoint->{properties} // {}, $scope ),
+    headers    => $self->_render_data( $endpoint->{headers}    // {}, $scope ),
+  };
+}
+
+########################################################################
+sub _render_data {
+########################################################################
+  my ( $self, $value, $scope ) = @_;
+
+  return $self->_render_template( $value, $scope )
+    if !ref $value;
+
+  my $type = reftype($value);
+
+  if ( $type eq 'HASH' ) {
+    if ( exists $value->{ref} || exists $value->{fn} ) {
+      return $self->_evaluate_expression( $value, $scope );
+    }
+
+    my %result;
+
+    foreach my $key ( keys %{$value} ) {
+      $result{$key} = $self->_render_data( $value->{$key}, $scope, );
+    }
+
+    return \%result;
+  }
+
+  if ( $type eq 'ARRAY' ) {
+    return [ map { $self->_render_data( $_, $scope ) } @{$value} ];
+  }
+
+  return $value;
+}
+
+########################################################################
+sub _render_value {
+########################################################################
+  my ( $self, $value, $scope ) = @_;
+
+  if ( ref $value ) {
+    return $self->_evaluate_expression( $value, $scope )
+      if reftype($value) eq 'HASH';
+
+    return $value;
+  }
+
+  return $self->_render_template( $value, $scope );
+}
+
+########################################################################
+sub _render_template {
+########################################################################
+  my ( $self, $template, $scope ) = @_;
+
+  return $template
+    if !defined $template;
+
+  $template =~ s!
+  \{
+  ([A-Za-z][A-Za-z0-9_]*)
+  (?:\#([^}]+))?
+  \}
+!
+  $self->_resolve_template_value( $1, $2, $scope )
+!gexsm;
+
+  return $template;
+}
+
+########################################################################
+sub _resolve_template_value {
+########################################################################
+  my ( $self, $name, $path, $scope ) = @_;
+
+  croak "undefined endpoint template value '$name'"
+    if !exists $scope->{$name} || !defined $scope->{$name};
+
+  my $value = $scope->{$name};
+
+  if ( defined $path ) {
+    $value = $self->_get_attr( $value, $path );
+
+    croak "undefined endpoint template value '$name#$path'"
+      if !defined $value;
+  }
+
+  croak "endpoint template value '$name' is not scalar"
+    if ref $value;
+
+  return $value;
+}
+
+1;

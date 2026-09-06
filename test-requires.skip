@@ -1,5 +1,11 @@
 Amazon::API
+Amazon::API::S3Control
+Amazon::API::S3
+Amazon::API::Kinesis
 Amazon::API::Signature4
 Amazon::API::Botocore::Shape::Utils
 Amazon::API::Paginator::Compiler
 Amazon::API::Paginator
+Amazon::API::EndpointResolver
+Amazon::API::EndpointContext::Compiler
+Amazon::API::ServiceHook

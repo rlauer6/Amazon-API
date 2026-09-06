@@ -1,0 +1,8 @@
+# Roadmap
+
+| Version | Feature/Capability | Target Date | Status |
+| ------- | ------------------ | ----------- | ------ | 
+| 2.8.0  auth -> signer, regression/live validation | 9/7 | In-progress |
+| 2.9.0 | SigV4a | 9/26 | - |
+| 2.10.0 | S3 Express | 10/16 | - |
+| 3.0.0 |  Smithy protocol work + handler audit/fixes. | 11/27 | - |

@@ -11,6 +11,29 @@ use English qw(-no_match_vars);
 use File::Basename qw(dirname);
 use File::ShareDir qw(dist_dir);
 use Storable qw(retrieve);
+use Role::Tiny::With;
+
+BEGIN {
+  my $service_hook = __PACKAGE__ . '::ServiceHook';
+
+  ( my $service_hook_file = "$service_hook.pm" ) =~ s{::}{/}gxsm;
+
+  my $loaded = eval {
+    require $service_hook_file;
+    return 1;
+  };
+
+  if (!$loaded) {
+    die $EVAL_ERROR
+      if $EVAL_ERROR !~ m!^Can't locate \Q$service_hook_file\E!sm;
+
+    $service_hook = 'Amazon::API::ServiceHook';
+
+    require Amazon::API::ServiceHook;
+  }
+
+  with $service_hook;
+}
 
 use parent qw( Amazon::API );
 
@@ -67,23 +90,25 @@ sub new {
 
   register_service_shapes( $service, $botocore_descriptions->{shapes} );
 
-
   my %options = ref $options[0] ? %{ $options[0] } : @options;
 
   my $self = $class->SUPER::new(
-    { service             => '@service@',
-      endpoint_prefix     => '@endpoint_prefix@',
-      version             => '@service_version@',
-      target_prefix       => '@target_prefix@',
-      content_type        => '@content_type@',
-      botocore_metadata   => $botocore_descriptions->{metadata},
-      botocore_operations => $botocore_descriptions->{operations},
-      botocore_shapes     => $botocore_descriptions->{shapes},
-      paginators          => $botocore_descriptions->{paginators},
-      compiled_paginators => $botocore_descriptions->{compiled_paginators},
-      api_methods         => [ keys %{ $botocore_descriptions->{operations} } ],
-      debug               => $ENV{DEBUG} // 0,
-      decode_always       => 1,
+    { service                         => '@service@',
+      endpoint_prefix                 => '@endpoint_prefix@',
+      version                         => '@service_version@',
+      target_prefix                   => '@target_prefix@',
+      content_type                    => '@content_type@',
+      botocore_metadata               => $botocore_descriptions->{metadata},
+      botocore_operations             => $botocore_descriptions->{operations},
+      botocore_client_context_params  => $botocore_descriptions->{client_context_params},
+      botocore_shapes                 => $botocore_descriptions->{shapes},
+      compiled_endpoint_context       => $botocore_descriptions->{compiled_endpoint_context},
+      paginators                      => $botocore_descriptions->{paginators},
+      endpoint_rule_set               => $botocore_descriptions->{endpoint_rule_set},
+      compiled_paginators             => $botocore_descriptions->{compiled_paginators},
+      api_methods                     => [ keys %{ $botocore_descriptions->{operations} } ],
+      debug                           => $ENV{DEBUG} // 0,
+      decode_always                   => 1,
       %options
     }
   );

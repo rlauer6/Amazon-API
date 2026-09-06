@@ -1,0 +1,26 @@
+package Amazon::API::S3::ServiceHook;
+
+use strict;
+use warnings;
+
+use Role::Tiny;
+
+with 'Amazon::API::ServiceHook';
+
+after '_service_hook_before_parameter_build' => sub {
+  my ( $self, $request, $http ) = @_;
+
+  my $uri = $http->{requestUri};
+
+  $uri =~ s{^/[{]Bucket[}]}{}xsm;
+
+  if ( $uri eq q{} ) {
+    $uri = q{/};
+  }
+
+  $http->{requestUri} = $uri;
+
+  return;
+};
+
+1;
