@@ -35,6 +35,13 @@ $(BOTOCORE_STATE): | botocore-pull               # records HEAD after checkout, 
 	$(NO_ECHO)local=$$(cd $(BOTOCORE_PATH) && git rev-parse HEAD); \
 	if [[ ! -e $@ ]] || [[ "$$local" != "$$(cat $@)" ]]; then echo "$$local" > $@; fi
 
+
+.PHONY: partitions.json
+partitions.json: $(BOTOCORE_STATE) $(BUILD_DIR)/partitions.json
+
+$(BUILD_DIR)/partitions.json: $(BOTOCORE_STATE) | $(BOTOCORE_PATH)
+	$(NO_ECH)cp $(BOTOCORE_PATH)/botocore/data/partitions.json $@
+
 .PHONY: botocore-version
 botocore-version: $(BOTOCORE_STATE) $(BUILD_DIR)/botocore-version.json
 

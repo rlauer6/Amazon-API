@@ -6,6 +6,8 @@ use warnings;
 use Amazon::API::Constants qw($PADDING);
 use Amazon::API::BuildInfo;
 use Amazon::API::Paginator::Compiler;
+use Amazon::API::EndpointContext::Compiler;
+
 use Amazon::API::Template qw(fetch_template to_template_var render_template);
 
 use Carp;
@@ -49,37 +51,44 @@ sub get_service_descriptions {
 
     my $service_path = sprintf '%s/botocore/data/%s/%s', $botocore_path, $s, $boto_services->{$s}->{date};
 
-    my $service_file    = "$service_path/service-2.json";
-    my $paginators_file = "$service_path/paginators-1.json";
+    my $service_file           = "$service_path/service-2.json";
+    my $paginators_file        = "$service_path/paginators-1.json";
+    my $endpoint_rule_set_file = "$service_path/endpoint-rule-set-1.json";
 
-    my $paginators = eval { return $self->fetch_paginators($paginators_file); };
+    my $paginators        = eval { return $self->fetch_paginators($paginators_file); };
+    my $endpoint_rule_set = eval { return $self->fetch_endpoint_rule_set($endpoint_rule_set_file); };
 
     my $service_description = $self->fetch_service_description($service_file);
 
     if ( $service_description->{operations} ) {
-      my $operations = $service_description->{operations};
-      my $shapes     = $service_description->{shapes};
-      my $metadata   = $service_description->{metadata};
-
-      my $service_name = $metadata->{signingName} || $metadata->{endpointPrefix};
+      my $operations            = $service_description->{operations};
+      my $shapes                = $service_description->{shapes};
+      my $metadata              = $service_description->{metadata};
+      my $client_context_params = $service_description->{clientContextParams} // {};
+      my $service_name          = $metadata->{signingName} || $metadata->{endpointPrefix};
 
       my $botocore_data = {
         $s => {
-          actions             => [ keys %{$operations} ],
-          documentation       => $service_description->{documentation},
-          endpoint_prefix     => $metadata->{endpointPrefix},
-          json_version        => $metadata->{jsonVersion},
-          metadata            => $metadata,
-          metadata_keys       => [ keys %{$metadata} ],
-          operations          => $operations,
-          paginators          => $paginators,
-          protocol            => $metadata->{protocol},
-          service_name        => $service_name,
-          shapes              => $shapes,
-          target_prefix       => $metadata->{targetPrefix},
-          version             => $boto_services->{$s}->{date},
-          service_2_digest    => sha256_hex( slurp($service_file) ),
-          paginators_1_digest => -e $paginators_file ? sha256_hex( slurp($paginators_file) ) : 'no paginators',
+          actions                    => [ keys %{$operations} ],
+          client_context_params      => $client_context_params,
+          documentation              => $service_description->{documentation},
+          endpoint_prefix            => $metadata->{endpointPrefix},
+          json_version               => $metadata->{jsonVersion},
+          metadata                   => $metadata,
+          metadata_keys              => [ keys %{$metadata} ],
+          operations                 => $operations,
+          paginators                 => $paginators,
+          endpoint_rule_set          => $endpoint_rule_set,
+          protocol                   => $metadata->{protocol},
+          service_name               => $service_name,
+          shapes                     => $shapes,
+          target_prefix              => $metadata->{targetPrefix},
+          version                    => $boto_services->{$s}->{date},
+          service_2_digest           => sha256_hex( slurp($service_file) ),
+          paginators_1_digest        => -e $paginators_file ? sha256_hex( slurp($paginators_file) ) : 'no paginators',
+          endpoint_rule_set_1_digest => -e $endpoint_rule_set_file
+          ? sha256_hex( slurp($endpoint_rule_set_file) )
+          : 'no endpoint rule set',
         }
       };
 
@@ -114,6 +123,7 @@ sub fetch_json_file {
 ########################################################################
 sub fetch_service_description { goto &fetch_json_file; }
 sub fetch_paginators          { goto &fetch_json_file; }
+sub fetch_endpoint_rule_set   { goto &fetch_json_file; }
 ########################################################################
 
 # collect paths to most recent service-2.json files for all AWS services
@@ -206,6 +216,10 @@ sub create_stub {
   my $operations = $self->_strip_documentation( dclone $parameters->{operations} );
   my $shapes     = $self->_strip_documentation( dclone $parameters->{shapes} );
 
+  my $endpoint_context_compiler = Amazon::API::EndpointContext::Compiler->new;
+
+  my $compiled_endpoint_context = $endpoint_context_compiler->compile($operations);
+
   my $compiler = Amazon::API::Paginator::Compiler->new(
     operations => $operations,
     shapes     => $shapes,
@@ -218,13 +232,17 @@ sub create_stub {
   my $meta;
 
   nstore(
-    { compiled_paginators => $compiled_paginators,
-      metadata            => $parameters->{metadata},
-      operations          => $operations,
-      shapes              => $shapes,
-      paginators          => $parameters->{paginators},
-      service_2_digest    => $parameters->{service_2_digest},
-      paginators_1_digest => $parameters->{paginators_1_digest},
+    { compiled_endpoint_context  => $compiled_endpoint_context,
+      compiled_paginators        => $compiled_paginators,
+      metadata                   => $parameters->{metadata},
+      client_context_params      => $parameters->{client_context_params},
+      operations                 => $operations,
+      shapes                     => $shapes,
+      paginators                 => $parameters->{paginators},
+      endpoint_rule_set          => $parameters->{endpoint_rule_set},
+      service_2_digest           => $parameters->{service_2_digest},
+      paginators_1_digest        => $parameters->{paginators_1_digest},
+      endpoint_rule_set_1_digest => $parameters->{endpoint_rule_set_1_digest},
     },
     \$meta
   );
@@ -346,6 +364,14 @@ sub fetch_boto_services {
     }
     else {
       $boto_services{$service}->{paginators_1_digest} = 'no paginators';
+    }
+
+    my $endpoint_rule_set_file = dirname($service_2_file) . '/endpoint-rule-set-1.json';
+    if ( -e $endpoint_rule_set_file ) {
+      $boto_services{$service}->{endpoint_rule_set_1_digest} = sha256_hex( slurp($endpoint_rule_set_file) );
+    }
+    else {
+      $boto_services{$service}->{endpoint_rule_set_1_digest} = 'no endpoint rule set';
     }
   }
 
@@ -506,12 +532,13 @@ Amazon::API::Role::Botocore - role providing an interface to Botocore metadata
 
 =head1 DESCRIPTION
 
-C<Amazon::API::Role::Botocore> is a L<Role::Tiny> role that encapsulates
-the Botocore-facing operations used to generate C<Amazon::API> service
-classes. It enumerates the AWS services present in a Botocore checkout,
-loads and normalizes their C<service-2.json> / C<paginators-1.json>
-definitions, generates a runtime service stub together with a serialized
-metadata image, and resolves a Botocore service name to the C<Amazon::API>
+C<Amazon::API::Role::Botocore> is a L<Role::Tiny> role that
+encapsulates the Botocore-facing operations used to generate
+C<Amazon::API> service classes. It enumerates the AWS services present
+in a Botocore checkout, loads and normalizes their C<service-2.json>,
+C<paginators-1.json>, C<endpoint-rule-set-1.json> definitions,
+generates a runtime service stub together with a serialized metadata
+image, and resolves a Botocore service name to the C<Amazon::API>
 package that implements it.
 
 It reads two sources: the raw Botocore checkout (located via

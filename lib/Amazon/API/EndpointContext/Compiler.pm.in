@@ -1,0 +1,176 @@
+package Amazon::API::EndpointContext::Compiler;
+
+use strict;
+use warnings;
+
+use Carp;
+use English qw(-no_match_vars);
+use Scalar::Util qw(reftype blessed);
+use List::Util qw(any);
+
+########################################################################
+sub new {
+########################################################################
+  my ($class) = @_;
+
+  return bless {}, $class;
+}
+
+########################################################################
+sub compile {
+########################################################################
+  my ( $self, $operations ) = @_;
+
+  croak 'operations must be a hash reference'
+    if !ref $operations
+    || reftype($operations) ne 'HASH';
+
+  my %compiled;
+
+  foreach my $action ( sort keys %{$operations} ) {
+    my $operation_context = $operations->{$action}->{operationContextParams};
+
+    next
+      if !$operation_context;
+
+    croak "operationContextParams for $action must be a hash reference"
+      if !ref $operation_context
+      || reftype($operation_context) ne 'HASH';
+
+    foreach my $name ( sort keys %{$operation_context} ) {
+      my $definition = $operation_context->{$name};
+
+      croak "operationContextParams $name for $action must be a hash reference"
+        if !ref $definition
+        || reftype($definition) ne 'HASH';
+
+      my $path = $definition->{path};
+
+      croak "operationContextParams $name for $action has no path"
+        if !defined $path
+        || ref $path
+        || $path eq q{};
+
+      $compiled{$action}->{$name}
+        = $self->_compile_expression( $action, $name, $path );
+    }
+  }
+
+  return \%compiled;
+}
+
+########################################################################
+sub _compile_expression {
+########################################################################
+  my ( $self, $action, $name, $expression ) = @_;
+
+  if ( $expression =~ /^keys\(([^.()\[\]\s]+)\)$/ ) {
+    return { $1 => { _function => 'keys', }, };
+  }
+
+  if ( $expression =~ /^([^.()\[\]\s]+)\[\*\]\.(.+)$/ ) {
+    my $source = $1;
+    my $rest   = $2;
+
+    $rest =~ s/\[\]$//;
+
+    my @selectors;
+
+    if ( $rest =~ /^\[(.+)\]$/ ) {
+      foreach my $selector ( split /\s*,\s*/, $1 ) {
+        push @selectors, $self->_compile_path( $action, $name, $selector );
+      }
+    }
+    else {
+      push @selectors, $self->_compile_path( $action, $name, $rest );
+    }
+
+    return { $source => \@selectors, };
+  }
+
+  return $self->_compile_path( $action, $name, $expression );
+}
+
+########################################################################
+sub _compile_path {
+########################################################################
+  my ( $self, $action, $name, $path ) = @_;
+
+  my @parts = split /[.]/, $path, -1;
+
+  croak "unsupported operation context path for $action $name: $path"
+    if any { $_ eq q{} || /[\[\](),\s]/ } @parts;
+
+  my $selector = pop @parts;
+
+  while (@parts) {
+    $selector = { pop(@parts) => $selector, };
+  }
+
+  return $selector;
+}
+
+########################################################################
+sub _value {
+########################################################################
+  my ($value) = @_;
+
+  return $value->get__value
+    if blessed($value)
+    && $value->can('get__value');
+
+  return $value;
+}
+
+########################################################################
+sub evaluate {
+########################################################################
+  my ( $self, $expression, $parameters ) = @_;
+
+  return
+    if !defined $parameters;
+
+  $parameters = _value($parameters);
+
+  my ($key) = keys %{$expression};
+
+  return
+    if !exists $parameters->{$key};
+
+  my $value    = _value( $parameters->{$key} );
+  my $selector = $expression->{$key};
+
+  if ( !ref $selector ) {
+    return $value->{$selector};
+  }
+
+  if ( reftype($selector) eq 'HASH' ) {
+    if ( $selector->{_function} ) {
+      return [ keys %{$value} ]
+        if $selector->{_function} eq 'keys';
+
+      croak "unsupported endpoint context function: $selector->{_function}";
+    }
+
+    return $self->evaluate( $selector, $value );
+  }
+
+  if ( reftype($selector) eq 'ARRAY' ) {
+    my @results;
+
+    foreach my $item ( @{$value} ) {
+      foreach my $expansion ( @{$selector} ) {
+        my $result = $self->evaluate( $expansion, $item );
+
+        push @results, $result
+          if defined $result;
+      }
+    }
+
+    return \@results;
+  }
+
+  croak 'unsupported compiled endpoint context expression';
+}
+
+1;

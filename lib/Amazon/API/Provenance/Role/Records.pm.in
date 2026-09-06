@@ -35,6 +35,7 @@ sub _create_provenance_records {
     'botocore'                        => $botocore_version,
     'service-2.json'                  => $service_meta->{service_2_digest},
     'paginators-1.json'               => $service_meta->{paginators_1_digest},
+    'endpoint-rule-set-1.json'        => $service_meta->{endpoint_rule_set_1_digest},
     'Amazon::API::BuildInfo::GIT_SHA' => $Amazon::API::BuildInfo::GIT_SHA,
     'Amazon::API::BuildInfo::VERSION' => $Amazon::API::BuildInfo::VERSION,
     'module_name'                     => $module_name,

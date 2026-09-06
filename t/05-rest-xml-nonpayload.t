@@ -77,6 +77,9 @@ Amazon::API::Botocore::Shape::Utils::register_service_shapes( 'TestR53', \%shape
 
   package Amazon::API::TestR53;
   our @ISA = ('Amazon::API');
+  use Role::Tiny::With;
+  with 'Amazon::API::ServiceHook';
+
 }
 
 my $api = bless {

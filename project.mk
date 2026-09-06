@@ -15,6 +15,8 @@ METADATA  = --no-metadata
 
 LOCAL_DEPS = \
     services.api \
+    $(BUILD_DIR)/botocore-version.json \
+    $(BUILD_DIR)/partitions.json \
     botocore-metadata.api \
     NOTICE \
     NOTICE.botocore \

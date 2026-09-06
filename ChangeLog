@@ -1,3 +1,97 @@
+Sun Sep  6 08:31:30 2026  Rob Lauer  <rclauer@gmail.com>
+
+	[2.8.0]:
+	* .gitignore: modified
+	* ROADMAP: new
+	* VERSION: bump
+	* release-notes: updated
+	* release-notes/release-notes-2.8.0.md: new
+	* .gitignore: + partitions.json
+	* botocore.mk
+	(partitions.json): new
+	* buildspec.yml: +partitions.json
+	* corpus-test/lib/ProtocolTest.pm
+	- add _service_hook_before_parameter_build stub
+	* requires: Amazon::Signature4::Lite 1.0.5 with	disable_double_encoding support
+	* cpanfile: likewise
+	* deps.mk: generated
+	* lib/Amazon/API.pm.in
+	- +botocore_client_context_params, client_context_params, compiled_endpoint_context
+	- +endpoint_rule_set, resolved_endopoint
+	- +use_fips, use_force_path_style, use_dualstack, use_global_endpoints
+	(new): _validate_client_context_params
+	(_service_hook_before_parameter_build): new
+	(init_botocore_request)
+	- use _resolve_request_endpoint to get service URL
+	- call service hook before building parameters
+	- more robust handling of uri encoding
+	(submit)
+	- use auth scheme from metadata now for signing
+	(_get_auth_scheme): new
+	(_validate_client_context_params): new
+	(_create_service_url_from_rule_set): new
+	(_resolve_request_endpoint): new
+	(_create_service_url)
+	- use _create_service_url_from_rule_set if we have a rule set
+	(_get_endpoint_context_parameters): new
+	* lib/Amazon/API/Botocore/Shape/Serializer.pm.in
+	(_serialize_list)
+	- avoid warning, test list element first
+	(serialize)
+	- fix unwrapping of root element when no matching locationName (S3)
+	* lib/Amazon/API/Provenance/Role/Records.pm.in
+	- add endpoint-rule-set-1.json to signed record
+	* lib/Amazon/API/Role/Botocore.pm.in
+	(get_service_descriptions)
+	- add endpoint_rule_set to metadata
+	- add client_context_params to metadata
+	- add endpoint_rule_set_1_digest to metadata
+	(fetch_endpoint_rule_set): new
+	(create_stub)
+	- pass compiled endpoint_context
+	- pass client_context_params
+	- pass endpoint_rule_set
+	- pass endpoint_rule_set_1_digest
+	(fetch_boto_services)
+	- fetch endpoint_rule_set_file and calculate digest if exists
+	* lib/Amazon/API/Signature4.pm.in
+	- pass disable_double_encoding flag
+	* project.mk
+	(LOCAL_DEPS): +botocore-version.json, partitions.json
+	* requires.cpan-dist
+	+ Amazon::API 2.8.0, Role::Tiny::With
+	* share/stub.pm.tmpl
+	- compose in Amazon::API::ServiceHook or service::ServiceHook
+	(new)
+	- add botocore_client_context_params
+	- add compiled_endpoint_context
+	- add endpoint_rule_set
+	* test-requires: +CLI::Simple::Utils, +Role::Tiny::With
+	* test-requires.skip
+	- +Amazon::API:*
+	* lib/Amazon/API/EndpointContext/Compiler.pm.in: new
+	* lib/Amazon/API/EndpointResolver.pm.in: new
+	* lib/Amazon/API/S3/ServiceHook.pm.in: new
+	* lib/Amazon/API/ServiceHook.pm.in: new
+
+	[2.8.0]: tests
+	* t/04-rest-xml-payload.t: modified
+	* t/05-rest-xml-nonpayload.t: modified
+	* t/06-signature4-adapter.t: modified
+	* t/08-rest-xml-header.t: modified
+	* t/13-endpoint-resolver.t: new
+	* t/14-endpoint-resolver.t: new
+	* t/15-endpoint-resolver.t: new
+	* t/16-endpoint-resolver.t: new
+	* t/17-endpoint-resolver.t: new
+	* t/18-endpoint-resolver.t: new
+	* t/19-endpoint-resolver.t: new
+	* t/20-endpoint-compiler.t: new
+	* t/21-endpoint-resolver.t: new
+	* t/22-endpoint-resolver.t: new
+	* t/23-uri-greedy-encoding.t: new
+	* t/24-force-path-style.t: new
+
 Thu Sep  3 12:21:15 2026  Rob Lauer  <rclauer@gmail.com>
 
 	[2.7.3]:

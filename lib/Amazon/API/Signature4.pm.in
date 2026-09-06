@@ -22,11 +22,12 @@ sub new {
   # convention (-access_key, -secret_key, -security_token). Translate
   # to Amazon::Signature4::Lite's plain-key convention.
   return $class->SUPER::new(
-    access_key    => $args{-access_key}     // $args{access_key},
-    secret_key    => $args{-secret_key}     // $args{secret_key},
-    session_token => $args{-security_token} // $args{session_token},
-    region        => $args{region}          // 'us-east-1',
-    service       => $args{service}         // 'execute-api',
+    access_key              => $args{-access_key}     // $args{access_key},
+    secret_key              => $args{-secret_key}     // $args{secret_key},
+    session_token           => $args{-security_token} // $args{session_token},
+    region                  => $args{region}          // 'us-east-1',
+    service                 => $args{service}         // 'execute-api',
+    disable_double_encoding => $args{disable_double_encoding},
   );
 }
 

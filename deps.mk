@@ -4,6 +4,8 @@
     ./lib/Amazon/API/Botocore/Shape/Serializer.pm \
     ./lib/Amazon/API/Botocore/Shape/Utils.pm \
     ./lib/Amazon/API/Constants.pm \
+    ./lib/Amazon/API/EndpointContext/Compiler.pm \
+    ./lib/Amazon/API/EndpointResolver.pm \
     ./lib/Amazon/API/Error.pm \
     ./lib/Amazon/API/HTTP/UserAgent.pm \
     ./lib/Amazon/API/NullLogger.pm \
@@ -59,12 +61,17 @@
 ./lib/Amazon/API/Role/Botocore.pm: \
     ./lib/Amazon/API/BuildInfo.pm \
     ./lib/Amazon/API/Constants.pm \
+    ./lib/Amazon/API/EndpointContext/Compiler.pm \
     ./lib/Amazon/API/Paginator/Compiler.pm \
     ./lib/Amazon/API/Template.pm
 
 # ./lib/Amazon/API/Role/Services.pm.in
 ./lib/Amazon/API/Role/Services.pm: \
     ./lib/Amazon/API/Constants.pm
+
+# ./lib/Amazon/API/S3/ServiceHook.pm.in
+./lib/Amazon/API/S3/ServiceHook.pm: \
+    ./lib/Amazon/API/ServiceHook.pm
 
 # ./lib/Amazon/API/Template.pm.in
 ./lib/Amazon/API/Template.pm: \

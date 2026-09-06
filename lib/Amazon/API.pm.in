@@ -51,15 +51,19 @@ __PACKAGE__->mk_accessors(
     api
     api_methods
     api_protocol
+    botocore_client_context_params
+    client_context_params
     botocore_metadata
     botocore_operations
     botocore_request_headers
     botocore_shapes
+    compiled_endpoint_context
     compiled_paginators
     content_type
     credentials
     decode_always
     endpoint_prefix
+    endpoint_rule_set
     error
     force_array
     http_method
@@ -78,6 +82,7 @@ __PACKAGE__->mk_accessors(
     raise_serialization_errors
     region
     request_uri
+    resolved_endpoint
     response
     service
     serializer
@@ -86,6 +91,10 @@ __PACKAGE__->mk_accessors(
     target_prefix
     url
     use_botocore
+    use_fips
+    use_force_path_style
+    use_dualstack
+    use_global_endpoint
     use_legacy_paginator
     user_agent
     use_paginator
@@ -165,6 +174,8 @@ sub new {
     );
     $self->set_serializer($serializer);
   }
+
+  $self->_validate_client_context_params;
 
   return $self;
 }
@@ -834,6 +845,8 @@ sub init_botocore_request {
   if ( !$input ) {
     $self->set_http_method($method);
 
+    $self->_resolve_request_endpoint();
+
     return []
       if $protocol eq 'query'
       || $protocol eq 'ec2';
@@ -858,6 +871,8 @@ sub init_botocore_request {
   if ( !$request_shape_name && $self->is_botocore_api ) {
 
     $boto_request = $self->create_botocore_request( parameters => $request );
+
+    $self->_resolve_request_endpoint($boto_request);
 
     if ( !$boto_request ) {
       croak "could not create a botocore request object\n$EVAL_ERROR\n";
@@ -954,7 +969,11 @@ sub init_botocore_request {
       delete @parameters{@args};
     }
     else {
-      $uri = $http->{requestUri};  # use the Botocore template
+      my %cloned_http = %{$http};
+
+      $self->_service_hook_before_parameter_build( $request, \%cloned_http );
+
+      $uri = $cloned_http{requestUri};  # use the Botocore template
 
       my $shape_parameters = $parameters{$shape};
 
@@ -971,32 +990,23 @@ sub init_botocore_request {
       );
 
       foreach my $p ( keys %{$shape_parameters} ) {
-        $self->get_logger->trace( Dumper( [ parameter => $p ] ) );
-
         if ( my $var = $self->is_uri_param( $request_shape_name, $p ) ) {
 
           my $val = $shape_parameters->{$p};
 
-          $self->get_logger->trace(
-            Dumper(
-              [ var => $var,
-                val => $val,
-              ]
-            )
-          );
-
-          # A uri-located parameter substitutes directly into the request
-          # path (e.g. .../distribution/{DistributionId}/invalidation) - an
-          # undef value here means $uri's substitution silently leaves the
-          # literal '{...}' placeholder in place (or, with some patterns,
-          # an empty path segment), producing a malformed request that AWS
-          # rejects with an opaque error (e.g. InvalidAction) far removed
-          # from the actual cause. Fail here, naming the parameter, instead
-          # of sending a request we already know is broken.
           croak "$action: required uri parameter '$p' is undef\n"
             if !defined $val;
 
-          $uri =~ s/[{]$var[}]/$val/xsm;
+          if ( $uri =~ /[{]\Q$var\E[+][}]/xsm ) {
+            $val = uri_escape_utf8( $val, q{^A-Za-z0-9\-._~/}, );
+
+            $uri =~ s/[{]\Q$var\E[+][}]/$val/xsm;
+          }
+          else {
+            $val = uri_escape_utf8($val);
+
+            $uri =~ s/[{]\Q$var\E[}]/$val/xsm;
+          }
 
           delete $shape_parameters->{$p};
         }
@@ -1130,6 +1140,10 @@ sub init_botocore_request {
 
   return $content;
 }
+
+########################################################################
+sub _service_hook_before_parameter_build { return; }
+########################################################################
 
 ########################################################################
 sub _resolve_request_content {
@@ -1821,16 +1835,16 @@ sub submit {
     $request->header( 'X-Amz-Security-Token' => $token );
   }
 
-  my $region = $self->get_region;
+  my $auth_scheme = $self->_get_auth_scheme;
 
-  # sign the request
   Amazon::API::Signature4->new(
-    -access_key     => $credentials->get_aws_access_key_id,
-    -secret_key     => $credentials->get_aws_secret_access_key,
-    -security_token => $credentials->get_token || undef,
-    service         => $self->get_service,
-    region          => $region,
-  )->sign( $request, $self->get_region );
+    -access_key             => $credentials->get_aws_access_key_id,
+    -secret_key             => $credentials->get_aws_secret_access_key,
+    -security_token         => $credentials->get_token || undef,
+    service                 => $auth_scheme->{signingName},
+    region                  => $auth_scheme->{signingRegion},
+    disable_double_encoding => $auth_scheme->{disableDoubleEncoding},
+  )->sign( $request, $auth_scheme->{signingRegion} );
 
   $self->get_logger->trace( sub { return Dumper( [ request => $self->_sanitize($request) ] ) } );
 
@@ -1845,6 +1859,41 @@ sub submit {
   );
 
   return $rsp;
+}
+
+########################################################################
+sub _get_auth_scheme {
+########################################################################
+  my ($self) = @_;
+
+  my $default = {
+    name          => 'sigv4',
+    signingName   => $self->get_service,
+    signingRegion => $self->get_region,
+  };
+
+  my $endpoint = $self->get_resolved_endpoint;
+
+  my $auth_scheme = choose {
+    return $default
+      if !$endpoint;
+
+    my $properties   = $endpoint->{properties} // {};
+    my $auth_schemes = $properties->{authSchemes};
+
+    return $default
+      if !$auth_schemes;
+
+    foreach my $scheme ( @{$auth_schemes} ) {
+      next
+        if ( $scheme->{name} // q{} ) ne 'sigv4';
+
+      return { %{$default}, %{$scheme}, };
+    }
+    croak 'endpoint does not provide a supported SigV4 authentication scheme';
+  };
+
+  return $auth_scheme;
 }
 
 # +------------------+
@@ -1998,6 +2047,22 @@ sub _unpack_args {
     if @{$args} > 1 || !ref $args->[0];
 
   return @{ $args->[0] }{@var_names};
+}
+
+########################################################################
+sub _validate_client_context_params {
+########################################################################
+  my ($self) = @_;
+
+  my $parameters  = $self->get_client_context_params          // {};
+  my $definitions = $self->get_botocore_client_context_params // {};
+
+  foreach my $name ( keys %{$parameters} ) {
+    croak "unknown client context parameter '$name'"
+      if !exists $definitions->{$name};
+  }
+
+  return $self;
 }
 
 ########################################################################
@@ -2240,6 +2305,60 @@ sub _set_defaults {
 }
 
 ########################################################################
+sub _create_service_url_from_rule_set {
+########################################################################
+  my ( $self, $endpoint_rule_set, $request_parameters ) = @_;
+
+  require Amazon::API::EndpointResolver;
+
+  $request_parameters //= {};
+
+  my $resolver = Amazon::API::EndpointResolver->new( endpoint_rule_set => $endpoint_rule_set, );
+
+  my %parameters = (
+    Region            => $self->get_region,
+    UseFIPS           => $self->get_use_fips,
+    UseDualStack      => $self->get_use_dualstack,
+    UseGlobalEndpoint => $self->get_use_global_endpoint,
+    ForcePathStyle    => $self->get_use_force_path_style,
+    %{$request_parameters},
+  );
+
+  foreach my $name ( keys %parameters ) {
+    next if exists $endpoint_rule_set->{parameters}->{$name};
+    delete $parameters{$name};
+  }
+
+  my $endpoint = $resolver->resolve(%parameters);
+
+  $self->set_resolved_endpoint($endpoint);
+
+  return $endpoint->{url};
+}
+
+########################################################################
+sub _resolve_request_endpoint {
+########################################################################
+  my ( $self, $request ) = @_;
+
+  my $endpoint_rule_set = $self->get_endpoint_rule_set;
+
+  return
+    if !$endpoint_rule_set;
+
+  my $parameters = $self->_get_endpoint_context_parameters($request);
+
+  return
+    if !%{$parameters};
+
+  my $url = $self->_create_service_url_from_rule_set( $endpoint_rule_set, $parameters, );
+
+  $self->set_url($url);
+
+  return;
+}
+
+########################################################################
 sub _create_service_url {
 ########################################################################
   my ($self) = @_;
@@ -2248,6 +2367,10 @@ sub _create_service_url {
 
   my $botocore_metadata = $self->get_botocore_metadata;
   my $service           = $self->get_service;
+  my $endpoint_rule_set = $self->get_endpoint_rule_set;
+
+  return $self->_create_service_url_from_rule_set($endpoint_rule_set)
+    if $endpoint_rule_set;
 
   if ( $botocore_metadata && $botocore_metadata->{globalEndpoint} ) {
     $url = sprintf '%s://%s', $self->get_protocol, $botocore_metadata->{globalEndpoint};
@@ -2348,6 +2471,90 @@ sub _set_request_content {
   $self->get_logger->trace( sub { return Dumper( [ request => $self->_sanitize($request) ] ); } );
 
   return $request;
+}
+
+########################################################################
+sub _get_endpoint_context_parameters {
+########################################################################
+  my ( $self, $request ) = @_;
+
+  my %parameters;
+
+  # clientContextParams
+  my $client_context = $self->get_client_context_params // {};
+
+  my $client_definitions = $self->get_botocore_client_context_params // {};
+
+  foreach my $name ( keys %{$client_context} ) {
+
+    my $value = $client_context->{$name};
+
+    next
+      if !defined $value;
+
+    $parameters{$name} = $value;
+  }
+
+  my $operation = $self->get_botocore_operations->{ $self->get_action } // {};
+
+  # operationContextParams
+  if ($request) {
+    my $compiled_endpoint_context = $self->get_compiled_endpoint_context              // {};
+    my $compiled_context          = $compiled_endpoint_context->{ $self->get_action } // {};
+
+    if ( %{$compiled_context} ) {
+      require Amazon::API::EndpointContext::Compiler;
+
+      my $compiler = Amazon::API::EndpointContext::Compiler->new;
+
+      foreach my $name ( keys %{$compiled_context} ) {
+        my $value = $compiler->evaluate( $compiled_context->{$name}, $request, );
+
+        next
+          if !defined $value;
+
+        $parameters{$name} = $value;
+      }
+    }
+
+    # contextParam
+    foreach my $member_name ( keys %{ $request->{members} // {} } ) {
+      my $member = $request->{members}->{$member_name};
+
+      my $context_param = $member->{contextParam};
+
+      next
+        if !$context_param;
+
+      my $name = $context_param->{name};
+
+      next
+        if !defined $name;
+
+      my $value = $request->{_value}->{$member_name};
+
+      next
+        if !defined $value;
+
+      $value = $value->{_value}
+        if ref $value && exists $value->{_value};
+
+      $parameters{$name} = $value;
+    }
+  }
+
+  # staticContextParams
+  foreach my $name ( keys %{ $operation->{staticContextParams} // {} } ) {
+    my $value
+      = $operation->{staticContextParams}->{$name}->{value};
+
+    next
+      if !defined $value;
+
+    $parameters{$name} = $value;
+  }
+
+  return \%parameters;
 }
 
 ########################################################################

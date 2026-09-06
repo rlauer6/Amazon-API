@@ -79,6 +79,8 @@ Amazon::API::Botocore::Shape::Utils::register_service_shapes( 'TestCF', \%shapes
 
   package Amazon::API::TestCF;
   our @ISA = ('Amazon::API');
+  use Role::Tiny::With;
+  with 'Amazon::API::ServiceHook';
 }
 
 my $api = bless {
