@@ -1,5 +1,4 @@
 partitions.json
-NOTICE
 corpus-test/input
 corpus-test/output
 corpus-test/test.log
@@ -45,3 +44,12 @@ provenance*
 bin/amzn-api
 **/*.pl
 **/*.pm
+**/*.bak
+**/*.log
+**/*.pod
+**/*.tmp
+**/.\#*
+**/\#*
+cpanfile.*
+test-requires.cpanfile
+test-requires.scan

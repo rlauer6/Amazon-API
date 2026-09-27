@@ -84,7 +84,7 @@ F<botocore-version.json> that ships in the distribution's share directory
 against).
 
 Downstream tooling relies on this as the single source of truth for "which
-versions produced this build" — the API build factory resolves the botocore
+versions produced this build" - the API build factory resolves the botocore
 tag to pin its platform image from C<< ->version->{botocore_version}{version} >>,
 and the provenance records attest builds against it. The C<dirty> field
 supports a build-hygiene check: a clean build has C<dirty> equal to
@@ -129,7 +129,7 @@ Croaks if F<botocore-version.json> cannot be located.
 my ( $version, $commit ) = Amazon::API::BuildInfo->botocore_version;
 
 Convenience accessor returning the pinned botocore release as a two-element
-list — the C<version> (tag) and C<commit> — equivalent to
+list - the C<version> (tag) and C<commit> - equivalent to
 C<< @{ Amazon::API::BuildInfo->version->{botocore_version} }{qw(version commit)} >>.
 Note that it returns a list, not a hash reference.
 

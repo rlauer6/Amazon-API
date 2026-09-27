@@ -1,0 +1,4 @@
+botocore-metadata.api
+botocore-version.json
+partitions.json
+services.api

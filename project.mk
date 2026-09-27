@@ -151,3 +151,4 @@ NOTICE: NOTICE.in botocore-version.json
         export BOTOCORE_COMMIT BOTOCORE_VERSION; \
 	$(BOOTSTRAPPER) resolve-vars $< > $@
 
+include dockerhub.mk

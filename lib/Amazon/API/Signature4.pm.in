@@ -39,7 +39,7 @@ sub new {
 #
 # Carries a full S3 endpoint regex set covering FIPS, dual-stack, S3
 # control plane, and account-id-prefixed endpoints that Amazon::API
-# encounters — independent of Amazon::Signature4::Lite's patterns.
+# encounters - independent of Amazon::Signature4::Lite's patterns.
 ########################################################################
 
 our @SERVICE_URL_REGEXP = (

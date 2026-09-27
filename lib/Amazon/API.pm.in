@@ -2677,17 +2677,9 @@ Amazon::API - A generic base class for AWS Services
 
 =head1 DESCRIPTION
 
-https://github.com/rlauer6/perl-Amazon-API/actions/workflows/build.yml/badge.svg
-
-=begin 'markdown'
-
-[![Amazon-API](https://github.com/rlauer6/perl-Amazon-API/actions/workflows/build.yml/badge.svg)](https://github.com/rlauer6/perl-Amazon-API/actions/workflows/build.yml)
-
-=end 'markdown'
-
 Generic class for constructing AWS API interfaces. Typically used as a
 parent class, but can be used directly. This package can also
-generates stubs for Amazon APIs using the Botocore project
+generate stubs for Amazon APIs using the Botocore project
 metadata. (See L</BOTOCORE SUPPORT>).
 
 The typical use of this API is through the classes you build with
@@ -2714,6 +2706,21 @@ Botocore metadata.
 
 =back
 
+=head1 Try It Using Docker
+
+If you just want to try C<Amazon::API> without installing anything
+locally, a pre-built Docker image is available from
+L<DockerHub|https://hub.docker.com/r/rlauer/amazon-api>. Assuming you
+have AWS credentials that can be discovered from your AWS CLI
+configuration in C<$HOME/.aws>:
+
+  docker run --rm \
+    -v "$HOME/.aws:/root/.aws:ro" \
+    -e AWS_PROFILE=my-profile \
+    rlauer/amazon-api:latest \
+    perl -MAmazon::API::STS -MData::Dumper \
+         -e 'print Dumper(Amazon::API::STS->new->GetCallerIdentity)'
+
 =head1 BACKGROUND AND MOTIVATION
 
 A comprehensive Perl interface to AWS services similar to the
@@ -2735,7 +2742,7 @@ L</BOTOCORE SUPPORT> for more details.
 =over 5
 
 I<NOTE:> The original L<Amazon::API> was written in 2017 as a I<very>
-lightweight way to call a handfull of APIs. The evolution of the
+lightweight way to call a handful of APIs. The evolution of the
 module was based on discovering, without much documentation or help,
 the nature of Amazon APIs. In retrospect, even back then, it would
 have been easier to consult the Botocore project and decipher how that
@@ -2902,7 +2909,7 @@ credentials file will be found automatically by
 L<Amazon::Credentials>.
 
   AWS_PROFILE=sandbox perl -I lib -MAmazon::API::STS -MData::Dumper \
-    -e 'Amazon::STS::API::STS->new->GetCallerIdentity;'
+    -e 'Amazon::API::STS->new->GetCallerIdentity;'
 
 =back
 
@@ -2944,10 +2951,11 @@ API without installing a large number of dependencies.
 
 If you don't mind a few extra dependencies and overhead, you should
 generate the stub APIs using the C<amzn-api> utility or download the
-classes from the L</Amazon::API>. The stubs produced by the utility
-will serialize and deserialize requests and responses correctly by
-using the Botocore metadata. The generated classes use the Botocore
-service models together with C<Amazon::API>'s protocol
+classes from the C<Amazon::API>
+L<website|https://cpan.openbedrock.net/signature>. The stubs produced
+by the utility will serialize and deserialize requests and responses
+correctly by using the Botocore metadata. The generated classes use
+the Botocore service models together with C<Amazon::API>'s protocol
 implementation to serialize requests and deserialize responses for the
 supported Botocore protocols.
 
@@ -2989,7 +2997,7 @@ method.
 Service classes are subclassed from C<Amazon::API> so their C<new()>
 constructor takes the same arguments as C<Amazon::API::new()>.
 
- my $credentials = Amazon::Credential->new();
+ my $credentials = Amazon::Credentials->new();
 
  my $sqs = Amazon::API::SQS->new( credentials => $credentials );
 
@@ -3030,8 +3038,8 @@ payloads, XML namespaces and wrappers, timestamps, blobs, empty
 structures, and protocol-specific result wrappers.
 
 At the time this documentation was updated, the Botocore protocol
-corpus comprised 632 request and successful-response tests and an
-additional 31 error-response tests, all of which pass.
+corpus comprised over 600 request and successful-response tests and an
+additional 30+ error-response tests, all of which pass.
 
 Passing the Botocore protocol corpus does not mean that every operation
 of every AWS service has been exercised against AWS.  Botocore metadata
@@ -3885,7 +3893,7 @@ B<Trace output may contain sensitive application data; see
 "Trace logging and sensitive data".>
 
 
-=item 2. Excecute the AWS CLI with the --debug option and compare the
+=item 2. Execute the AWS CLI with the --debug option and compare the
 request and response with that of your calls.
 
 =back
@@ -3957,10 +3965,11 @@ L<https://github.com/rlauer6/perl-Amazon-API/issues>
 Maybe you shouldn't. Paws is a community supported project and may be
 a better choice for most people. The programmers who created Paws are
 luminaries in the pantheon of Perl programming (alliteration
-intended). If you don't want to install of the AWS services but only
-need to use a single service, L<Amazon::API> may be the right choice
-for you.  Paws may also have some edge cases for some of the seldom
-used services and you might find this module easier to use and debug.
+intended). If you don't want to install all of the AWS services but
+only need to use a single service, L<Amazon::API> may be the right
+choice for you.  Paws may also have some edge cases for some of the
+seldom used services and you might find this module easier to use and
+debug.
 
 =head2 Does it perform better than Paws?
 
@@ -3982,8 +3991,8 @@ and C<rest-xml> protocol families.  Request serialization, successful
 response deserialization, and AWS error-response handling have been
 tested against Botocore's own protocol test fixtures.
 
-At the time this documentation was updated, the suite included 632
-request and successful-response cases plus 31 error-response cases.
+At the time this documentation was updated, the suite included 600+
+request and successful-response cases plus 30+ error-response cases.
 All of them pass.
 
 This is an important distinction from testing a few representative AWS
@@ -4040,9 +4049,8 @@ Yes. See L<Amazon::Credentials>.
 
 =head2 How stable is the interface?
 
-As of version 2.1.0 the interface is quite stable. There are currently
-(as of 2.7.1) no outstanding bugs logged against the project. I now
-consider this project "production ready".
+As of version 2.1.0 the interface is quite stable. I now consider this
+project "production ready".
 
 =head2 Why are you using XML::Simple when it clearly says "DO NOT"?
 
@@ -4120,6 +4128,13 @@ not include the full AWS service documentation.
 See L</BETTER TOGETHER> for information about L<Amazon::API::Help>
 which provides documentation for services, API methods, request
 objects, response objects, and parameters.
+
+=head2 Which Botocore version was this Amazon::API built against?
+
+  use Amazon::API::BuildInfo;
+
+  my ($version, $commit) =
+      Amazon::API::BuildInfo->botocore_version;
 
 =head1 BETTER TOGETHER
 

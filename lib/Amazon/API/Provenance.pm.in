@@ -371,8 +371,8 @@ amzn-api-provenance - create, sign, and verify provenance records for generated 
 
  # verify a record's signature via KMS
  amzn-api-provenance --key-alias alias/provenance-signing \
-   --signature-file Amazon-API-STS-2011.06.15.sig \
-   file://Amazon-API-STS-2011.06.15.json verify
+   --signature-file Amazon-API-STS-1.43.103.sig \
+   file://Amazon-API-STS-1.43.103.json verify
 
  # bring-your-own-key utilities
  amzn-api-provenance --key-alias alias/my-signing create-key
@@ -635,7 +635,7 @@ The service and its api-version date (e.g. C<sts/2011-06-15>).
 
 =item tarball
 
-The distribution filename (e.g. C<Amazon-API-STS-2011.06.15.tar.gz>), so the
+The distribution filename (e.g. C<Amazon-API-STS-1.43.103.tar.gz>), so the
 record is self-identifying.
 
 =item digest
@@ -661,8 +661,8 @@ with C<.tar.gz> stripped:
  <basename>.json       # the canonical provenance record
  <basename>.sig        # the detached KMS signature (raw DER)
 
-For C<Amazon-API-STS-2011.06.15.tar.gz> these are
-C<Amazon-API-STS-2011.06.15.json> and C<Amazon-API-STS-2011.06.15.sig>. The
+For C<Amazon-API-STS-1.43.103.tar.gz> these are
+C<Amazon-API-STS-1.43.103.json> and C<Amazon-API-STS-1.43.103.sig>. The
 name is derived mechanically from the tarball name so that, given a
 distribution, a consumer can compute the names of its record and signature
 without a lookup.
@@ -672,15 +672,15 @@ without a lookup.
 On the official Amazon::API DarkPAN (L<https://cpan.openbedrock.net/orepan2>)
 the record and signature for each published distribution live under a
 C</signature> directory, named as above. Given a tarball
-C<Amazon-API-STS-2011.06.15.tar.gz>, its record and signature are:
+C<Amazon-API-STS-1.43.103.tar.gz>, its record and signature are:
 
- https://cpan.openbedrock.net/orepan2/signature/Amazon-API-STS-2011.06.15.json
- https://cpan.openbedrock.net/orepan2/signature/Amazon-API-STS-2011.06.15.sig
+ https://cpan.openbedrock.net/orepan2/signature/Amazon-API-STS-1.43.103.json
+ https://cpan.openbedrock.net/orepan2/signature/Amazon-API-STS-1.43.103.sig
 
 =head1 THE PUBLISHED PUBLIC KEY
 
 The authoritative public key is published in the C<Amazon::API> B<GitHub
-repository> (C<provenance-pub.pem> at the repository root), deliberately I<not>
+repository> (C<Amazon-API.pem> at the repository root), deliberately I<not>
 alongside the artifacts on the DarkPAN. Keeping the key in a separate trust
 domain from the artifacts is the point: a verifier who obtains the key from
 GitHub and checks DarkPAN artifacts against it is not relying on the DarkPAN
@@ -698,9 +698,9 @@ Fetch the record and signature for the distribution, obtain the public key
 from the GitHub repository (not the DarkPAN), and verify with C<openssl> --
 no AWS access and no tooling from this project required:
 
- openssl dgst -sha256 -verify provenance-pub.pem \
-   -signature Amazon-API-STS-2011.06.15.sig \
-   Amazon-API-STS-2011.06.15.json
+ openssl dgst -sha256 -verify Amazon-API.pem \
+   -signature Amazon-API-STS-1.43.103.sig \
+   Amazon-API-STS-1.43.103.json
 
 C<Verified OK> confirms the record was signed by the holder of the private
 key and has not been altered. This establishes that the recorded inputs and
