@@ -38,7 +38,6 @@ Libraries needed to build certain Perl module dependencies:
 * `Module::ScanDeps::Static`
 * `Pod::Markdown`
 * `Pod::HTML2Pod`
-* `List::MoreUtils`
 * `JSON::XS`
 + ...and possibly others
 

@@ -1,3 +1,5 @@
+volume/
+build-requires.cpanfile
 partitions.json
 corpus-test/input
 corpus-test/output

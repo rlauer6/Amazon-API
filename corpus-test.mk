@@ -25,8 +25,16 @@ corpus-test/output/%.json: | $(BOTOCORE_PATH) corpus-test/output
 
 .PHONY: corpus-test
 # Added $(INPUT_CORPUS) and $(OUTPUT_CORPUS) as normal prerequisites
-corpus-test: $(INPUT_CORPUS) $(OUTPUT_CORPUS)
-	cd corpus-test; \
+corpus-test: $(INPUT_CORPUS) $(OUTPUT_CORPUS) | $(BOTOCORE_PATH) ## run Botocore protocol tests
+	$(NO_ECHO)cd corpus-test; \
+	export BOTOCORE_PATH=$(BOTOCORE_PATH); \
 	prove -v t/ 2>&1 | tee test.log
+
+test-local:: | $(BOTOCORE_PATH) ## run unit tests + endpoint tests
+	$(NO_ECHO)export BOTOCORE_PATH=$(BOTOCORE_PATH); \
+	prove -v -I lib t/
+
+.PHONY: full-test
+full-test: test-local corpus-test ## run unit tests, endpoint tests, corpus tests
 
 CLEANFILES += corpus-test/test.log $(INPUT_CORPUS) $(OUTPUT_CORPUS)

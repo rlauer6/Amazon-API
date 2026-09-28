@@ -4,7 +4,7 @@ use strict;
 use warnings;
 
 use Carp;
-use CLI::Simple::Utils qw(slurp_json);
+use Amazon::API::Utils qw(slurp_json);
 use English qw(-no_match_vars);
 
 use File::ShareDir qw(dist_file);

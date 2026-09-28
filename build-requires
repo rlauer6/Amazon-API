@@ -1,3 +1,4 @@
-CPAN::Maker::Bootstrapper@2.3.0
+CLI::Simple 2.2.2
+CPAN::Maker::Bootstrapper 2.3.0
 Markdown::Render
 Pod::Markdown

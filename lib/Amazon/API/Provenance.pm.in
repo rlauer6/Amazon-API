@@ -3,8 +3,8 @@ package Amazon::API::Provenance;
 use strict;
 use warnings;
 
-use CLI::Simple::Constants qw(:booleans);
-use CLI::Simple::Utils qw(slurp_json choose slurp);
+use Amazon::API::Constants qw($TRUE $SUCCESS $FAILURE);
+use Amazon::API::Utils qw(slurp_json choose slurp);
 use Cwd qw(getcwd);
 use Data::Dumper;
 use English qw(-no_match_vars);
@@ -24,9 +24,16 @@ Readonly::Scalar our $DEFAULT_KEY_SPEC  => 'ECC_NIST_P256';
 Readonly::Scalar our $DEFAULT_KEY_USAGE => 'SIGN_VERIFY';
 Readonly::Scalar our $SIGNING_ALGORITHM => 'ECDSA_SHA_256';
 
-__PACKAGE__->use_log4perl( level => 'info' );
+our @ISA = qw(CLI::Simple);
 
-use parent qw(CLI::Simple);
+if ( $ENV{MODULINO_WRAPPER} ) {
+  eval {
+    require CLI::Simple;
+    1;
+  } or die "CLI::Simple is required to use the Amazon::API provenance CLI\n";
+
+  __PACKAGE__->use_log4perl( level => 'info', );
+}
 
 caller or exit __PACKAGE__->main;
 

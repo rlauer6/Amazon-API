@@ -18,6 +18,7 @@ LOCAL_DEPS = \
     $(BUILD_DIR)/botocore-version.json \
     $(BUILD_DIR)/partitions.json \
     botocore-metadata.api \
+    build-requires.cpanfile \
     NOTICE \
     NOTICE.botocore \
     LICENSE.botocore
@@ -137,7 +138,8 @@ workdir/buildspec-api.yml: buildspec-api.yml.in workdir/service.api | workdir
 
 .PHONY: install
 install: $(TARBALL)
-	$(NO_ECHO)cpanm -n -v -l $(HOME) $<
+	$(NO_ECHO)cpm install --progress plain --verbose \
+	  --show-build-log-on-failure -L $(HOME) $<
 
 # TODO: relocation module-names.json to share/
 clean-local::
@@ -152,3 +154,15 @@ NOTICE: NOTICE.in botocore-version.json
 	$(BOOTSTRAPPER) resolve-vars $< > $@
 
 include dockerhub.mk
+
+build-requires.cpanfile: build-requires
+	$(NO_ECHO)$(CPAN_MAKER) create-cpanfile \
+	  --dependency-type requires $< -o $@
+
+local/.build-requires: build-requires.cpanfile
+	$(NO_ECHO)resolvers=(); \
+	for a in $$(cat build-mirrors 2>/dev/null); do \
+	  resolvers+=(--resolver 02packages,$$a); \
+	done; \
+	cpm install -L local --cpanfile $< "$${resolvers[@]}" --show-build-log-on-failure
+	$(NO_ECHO)touch $@

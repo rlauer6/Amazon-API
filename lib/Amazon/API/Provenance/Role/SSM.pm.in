@@ -4,7 +4,7 @@ package Amazon::API::Provenance::Role::SSM;
 use strict;
 use warnings;
 
-use CLI::Simple::Constants qw(:booleans);
+use Amazon::API::Constants qw($FALSE);
 use Data::Dumper;
 use English qw(-no_match_vars);
 

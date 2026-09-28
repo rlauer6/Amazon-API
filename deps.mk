@@ -31,12 +31,22 @@
     ./lib/Amazon/API/Constants.pm \
     ./lib/Amazon/API/Role/Botocore.pm
 
+# ./lib/Amazon/API/BuildInfo.pm.in
+./lib/Amazon/API/BuildInfo.pm: \
+    ./lib/Amazon/API/Utils.pm
+
 # ./lib/Amazon/API/CLI.pm.in
 ./lib/Amazon/API/CLI.pm: \
     ./lib/Amazon/API/BuildInfo.pm \
+    ./lib/Amazon/API/Constants.pm \
     ./lib/Amazon/API/Role/Botocore.pm \
     ./lib/Amazon/API/Role/ModuleNames.pm \
-    ./lib/Amazon/API/Role/Services.pm
+    ./lib/Amazon/API/Role/Services.pm \
+    ./lib/Amazon/API/Utils.pm
+
+# ./lib/Amazon/API/EndpointResolver.pm.in
+./lib/Amazon/API/EndpointResolver.pm: \
+    ./lib/Amazon/API/Utils.pm
 
 # ./lib/Amazon/API/Error.pm.in
 ./lib/Amazon/API/Error.pm: \
@@ -48,14 +58,21 @@
 
 # ./lib/Amazon/API/Provenance.pm.in
 ./lib/Amazon/API/Provenance.pm: \
+    ./lib/Amazon/API/Constants.pm \
     ./lib/Amazon/API/Provenance/Role/KMS.pm \
     ./lib/Amazon/API/Provenance/Role/Records.pm \
     ./lib/Amazon/API/Provenance/Role/SSM.pm \
-    ./lib/Amazon/API/Role/Botocore.pm
+    ./lib/Amazon/API/Role/Botocore.pm \
+    ./lib/Amazon/API/Utils.pm
 
 # ./lib/Amazon/API/Provenance/Role/Records.pm.in
 ./lib/Amazon/API/Provenance/Role/Records.pm: \
-    ./lib/Amazon/API/BuildInfo.pm
+    ./lib/Amazon/API/BuildInfo.pm \
+    ./lib/Amazon/API/Utils.pm
+
+# ./lib/Amazon/API/Provenance/Role/SSM.pm.in
+./lib/Amazon/API/Provenance/Role/SSM.pm: \
+    ./lib/Amazon/API/Constants.pm
 
 # ./lib/Amazon/API/Role/Botocore.pm.in
 ./lib/Amazon/API/Role/Botocore.pm: \
@@ -63,11 +80,18 @@
     ./lib/Amazon/API/Constants.pm \
     ./lib/Amazon/API/EndpointContext/Compiler.pm \
     ./lib/Amazon/API/Paginator/Compiler.pm \
-    ./lib/Amazon/API/Template.pm
+    ./lib/Amazon/API/Template.pm \
+    ./lib/Amazon/API/Utils.pm
+
+# ./lib/Amazon/API/Role/ModuleNames.pm.in
+./lib/Amazon/API/Role/ModuleNames.pm: \
+    ./lib/Amazon/API/Constants.pm \
+    ./lib/Amazon/API/Utils.pm
 
 # ./lib/Amazon/API/Role/Services.pm.in
 ./lib/Amazon/API/Role/Services.pm: \
-    ./lib/Amazon/API/Constants.pm
+    ./lib/Amazon/API/Constants.pm \
+    ./lib/Amazon/API/Utils.pm
 
 # ./lib/Amazon/API/S3/ServiceHook.pm.in
 ./lib/Amazon/API/S3/ServiceHook.pm: \
@@ -75,5 +99,6 @@
 
 # ./lib/Amazon/API/Template.pm.in
 ./lib/Amazon/API/Template.pm: \
-    ./lib/Amazon/API/Constants.pm
+    ./lib/Amazon/API/Constants.pm \
+    ./lib/Amazon/API/Utils.pm
 

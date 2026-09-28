@@ -1,6 +1,6 @@
 FROM debian:trixie AS builder
 
-ARG AMAZON_API_VERSION=2.8.0
+ARG AMAZON_API_VERSION
 ARG RESOLVER=02packages,https://cpan.openbedrock.net/orepan2
 
 RUN apt-get update \
@@ -18,11 +18,18 @@ RUN apt-get update \
         | perl - install -g App::cpm \
     && rm -rf /var/lib/apt/lists/*
 
+COPY Amazon-API-${AMAZON_API_VERSION}.tar.gz /tmp/
+
 RUN cpm install -L /app/local \
-        "Amazon::API@${AMAZON_API_VERSION}" \
-        Amazon::API::Help --show-build-log-on-failure --verbose --resolver "${RESOLVER}" \
+        --resolver "${RESOLVER}" \
+        --show-build-log-on-failure \
+        --verbose \
+        --no-test --without-test \
+        /tmp/Amazon-API-${AMAZON_API_VERSION}.tar.gz \
     && cpm install -L /app/local \
         --resolver "${RESOLVER}" \
+        --no-test --without-test \
+        Amazon::API::Help \
         Amazon::API::STS
 
 FROM debian:trixie-slim

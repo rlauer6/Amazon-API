@@ -4,7 +4,7 @@ use strict;
 use warnings;
 
 use Amazon::API::Constants qw(:chars :booleans);
-use CLI::Simple::Utils qw(slurp);
+use Amazon::API::Utils qw(slurp);
 use Pod::HTML2Pod;
 use English qw(-no_match_vars);
 use Fcntl qw(:seek);

@@ -3,10 +3,9 @@ package Amazon::API::Role::Services;
 use strict;
 use warnings;
 
-use Amazon::API::Constants qw(%SERVICE_CONTENT_TYPES);
+use Amazon::API::Constants qw($SUCCESS %SERVICE_CONTENT_TYPES);
+use Amazon::API::Utils qw(slurp_json choose);
 use Carp;
-use CLI::Simple::Constants qw(:booleans);
-use CLI::Simple::Utils qw(slurp_json choose);
 use Data::Dumper;
 use English qw(-no_match_vars);
 use File::ShareDir qw(dist_file);

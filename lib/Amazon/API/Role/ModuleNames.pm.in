@@ -4,8 +4,8 @@ use strict;
 use warnings;
 
 use Carp;
-use CLI::Simple::Constants qw(:booleans);
-use CLI::Simple::Utils qw(slurp_json choose);
+use Amazon::API::Constants qw($SUCCESS);
+use Amazon::API::Utils qw(slurp_json choose);
 use Data::Dumper;
 use English qw(-no_match_vars);
 use JSON;

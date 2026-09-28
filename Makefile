@@ -31,6 +31,8 @@ LOG_LEVEL ?= info
 NO_ECHO ?= @
 NO_COLOR ?=
 
+TARBALL_ORDER_ONLY_PREREQS ?=
+
 UNIT_TEST_NAME = $(shell TEST_NAME=$(PROJECT_NAME) perl -e 'printf q{t/00-%s.t}, lc $$ENV{TEST_NAME}')
 
 BOOTSTRAPPER   := $(shell command -v cmb)
@@ -177,7 +179,7 @@ cpanfile: cpanfile.requires cpanfile.suggests cpanfile.recommends
 	  cat $$a >>$@; \
 	done
 
-$(TARBALL): $(DEPS) | update-available \
+$(TARBALL): $(DEPS) | update-available $(TARBALL_ORDER_ONLY_PREREQS) \
     $(if $(tidy_on), $(PERL_MODULES:%=%.tdy) $(PERL_BIN_FILES:%=%.tdy)) \
     $(if $(critic_on), $(PERL_MODULES:%=%.crit) $(PERL_BIN_FILES:%=%.crit))
 	$(NO_ECHO)if [[ -z "$(NO_COLOR)" ]]; then \
@@ -266,7 +268,10 @@ test-requires.scan: $(TESTS)
 	rm -f file_list.tmp
 
 test-requires.raw: test-requires.scan provides
-	$(NO_ECHO)comm -23 test-requires.scan provides > $@
+	$(NO_ECHO)test_requires_tmp=$$(mktemp); \
+	trap 'rm -f $$test_requires_tmp' EXIT; \
+	sed -e 's/ 0$$/ undef/g' $< > $$test_requires_tmp; \
+	comm -23 $$test_requires_tmp provides > $@
 
 # shared by requires, recommends, suggests, and test-requires: reconciles
 # a fresh scan (%.raw) against history (skip list + previous run), via
@@ -408,7 +413,10 @@ build-ci:
 
 GSOURCE_FILES = $(SOURCE_FILES:.in=)
 
-test: $(GSOURCE_FILES) ## run unit tests
+.PHONY: test-local
+test-local::
+
+test: $(GSOURCE_FILES) test-local ## run unit tests
 	prove -I lib -v t/
 
 check: $(GSOURCE_FILES) ## syntax check and create source from .in file
@@ -437,7 +445,6 @@ package: clean ## run lint & scan
 
 # extra-files.mk:  $(TARBALL): share/foo.tpl share/bar.tpl 
 # git ls-files will ensure that we have added artifacts to repo
-
 
 extra-files: buildspec.yml
 	$(NO_ECHO)$(BOOTSTRAPPER) extra-files > $@.tmp; \

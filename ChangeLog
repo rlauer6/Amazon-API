@@ -1,3 +1,75 @@
+Mon Sep 28 06:02:07 2026  Rob Lauer  <rclauer@gmail.com>
+
+	[2.8.2]:
+	* release-notes: updated
+	* release-notes/release-notes-2.8.1.md: new
+	* lib/Amazon/API/Utils.pm.in: new
+	* Makefile: updated by CPAN::Maker::Bootstrapper
+	* VERSION: bump
+	* botocore.mk
+	(botocore-metadta.api): depends on local/.build-requires
+	(services.api): likewise
+	(TARBALL_ORDER_ONLY_PREREQS): new
+	(botocore-pull): removed
+	(botocore-checkout): new
+	(botocore-check-version): new
+	(update-botocore): reworked to be a phony target to explicitly update Botocore
+	* build-requires: +CLI::Simple
+	* corpus-test.mk
+	(test-local): new
+	(full-test): new
+	* requires
+	- -CLI::Simple, -List::MoreUtils
+	- JSON::PP 0
+	* cpanfile: likewise
+	* deps.mk: generated
+	* dockerhub.mk: add help comment
+	* lib/Amazon/API/BuildInfo.pm.in: Amazon::API::Utils, not CLI::Simple::Utils
+	* lib/Amazon/API/EndpointResolver.pm.in: likewise
+	* lib/Amazon/API/Provenance/Role/Records.pm.in: likewise
+	* lib/Amazon/API/Template.pm.in: likewise
+	* lib/Amazon/API/Role/ModuleNames.pm.in
+	- likewise, +Amazon::API::Constants not CLI::Simple::Constants
+	* lib/Amazon/API/Role/Services.pm.in: likewise
+	* lib/Amazon/API/CLI.pm.in
+	- likewise, +Amazon::API::Constants not CLI::Simple::Constants
+	- check for CLI::Simple if being called from modulino
+	* lib/Amazon/API/Role/Botocore.pm.in
+	- Amazon::API::Utils, not CLI::Simple::Utils
+	- Amazon::API::Constants not CLI::Simple::Constants
+	- -List::MoreUtils
+	(find_latest_service)
+	- replace first_index with inline code
+	* lib/Amazon/API/Provenance.pm.in: likewise
+	* lib/Amazon/API/Provenance/Role/SSM.pm.in: Amazon::API::Constants not CLI::Simple::Constants
+	* project.mk
+	(LOCAL_DEPS): +build-requires.cpanfile
+	(build-requires): new
+	(local/.build-requires): new
+	(install): use cpm
+	* requires.skip: +CLI::Simple
+	* suggests: +CLI::Simple 2.2.2
+	* t/14-endpoint-resolver.t: Amazon::API::Utils, not CLI::Simple::Utils
+	* t/15-endpoint-resolver.t: likewise
+	* t/16-endpoint-resolver.t: likewise
+	* t/17-endpoint-resolver.t: likewise
+	* t/18-endpoint-resolver.t: likewise
+	* t/19-endpoint-resolver.t: likewise
+	* t/21-endpoint-resolver.t: likewise
+	* t/22-endpoint-resolver.t: likewise
+	* test-requires: -CLI::Simple
+	* test-requires.skip: removed all due to CPAN::Maker::Bootstrapper fix
+	* docker/Dockerfile: deleted
+	* docker/Dockerfile.rpm-build: deleted
+	* docker/Makefile.docker: deleted
+	* docker/README.md: deleted
+	* docker/build-dist: deleted
+	* docker/create-cpan-dist: deleted
+	* docker/docker-compose.yaml: deleted
+	* docker/package-create-service.lst: deleted
+	* docker/package-rpm-build.lst: deleted
+	* docker/rpm-build: deleted
+
 Sun Sep 27 10:38:58 2026  Rob Lauer  <rclauer@gmail.com>
 
 	[2.8.1]:

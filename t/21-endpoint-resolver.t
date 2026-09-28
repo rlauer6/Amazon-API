@@ -5,7 +5,7 @@ use warnings;
 
 use Amazon::API::EndpointResolver;
 
-use CLI::Simple::Utils qw(slurp_json);
+use Amazon::API::Utils qw(slurp_json);
 use Test::More;
 
 my $botocore = $ENV{BOTOCORE_PATH}

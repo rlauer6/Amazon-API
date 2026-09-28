@@ -1,0 +1,67 @@
+package Amazon::API::Utils;
+
+use strict;
+use warnings;
+
+use Carp qw(croak);
+use English qw(-no_match_vars);
+use parent qw(Exporter);
+use JSON qw(decode_json);
+use Scalar::Util qw(openhandle);
+
+our @EXPORT_OK = qw(choose slurp slurp_json);
+#our $VERSION   = '@PACKAGE_VERSION@';
+
+########################################################################
+sub choose(&) { ## no critic
+########################################################################
+  my $code = shift;
+
+  # Pass the correct context down to the block
+  if (wantarray) {
+    return $code->();
+  }
+  elsif ( defined wantarray ) {
+    return scalar $code->();
+  }
+  else {
+    $code->();
+    return;
+  }
+}
+
+########################################################################
+sub slurp_json {
+########################################################################
+  my ($file) = @_;
+
+  my $json = eval { return decode_json( slurp($file) ) };
+
+  croak "ERROR: could not decode JSON string:\n$EVAL_ERROR\n"
+    if !$json || $EVAL_ERROR;
+
+  return $json;
+}
+
+########################################################################
+sub slurp {
+########################################################################
+  my ($file) = @_;
+
+  local $RS = undef;
+
+  return <$file>
+    if openhandle $file;
+
+  open my $fh, '<:raw', $file
+    or croak "ERROR: could not open $file\n";
+
+  my $content = <$fh>;
+
+  close $fh
+    or croak "ERROR: could not close $file\n";
+
+  return $content;
+}
+
+1;
